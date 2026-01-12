@@ -17,7 +17,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-dark flex flex-col">
       {/* Navigation */}
-      <Navigation />
+
 
       {/* Main Content */}
       <div

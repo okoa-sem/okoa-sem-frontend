@@ -118,16 +118,7 @@ export default function LoginFormPanel() {
             </p>
           </div>
 
-          <div className="text-center text-text-gray text-xs leading-relaxed border-t border-[#2A2A2A] pt-4">
-            By signing in, you agree to our{' '}
-            <Link href="/terms" className="text-primary hover:text-primary-dark transition-colors">
-              Terms
-            </Link>
-            {' & '}
-            <Link href="/privacy" className="text-primary hover:text-primary-dark transition-colors">
-              Privacy
-            </Link>
-          </div>
+         
         </>
       ) : (
         <OtpVerificationForm

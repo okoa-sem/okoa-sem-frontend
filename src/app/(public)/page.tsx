@@ -76,22 +76,7 @@ export default function HomePage() {
 
       <FAQSection />
 
-      <section className="section-padding bg-gradient-to-br from-primary to-primary-dark text-dark">
-        <div className="container-custom text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">
-            Ready to Ace Your Exams?
-          </h2>
-          <p className="text-xl mb-8 opacity-80">
-            Join thousands of students already using Okoa Sem to excel in their studies
-          </p>
-          <Link
-            href={ROUTES.SIGNUP}
-            className="inline-block px-8 py-4 bg-dark text-primary rounded-xl font-semibold text-lg transition-all hover:bg-dark/90 hover:-translate-y-1"
-          >
-            Get Started Free →
-          </Link>
-        </div>
-      </section>
+     
     </main>
     <Footer />
     </>

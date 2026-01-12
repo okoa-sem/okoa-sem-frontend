@@ -120,7 +120,7 @@ export default function Hero() {
       <div className="relative z-10 w-full min-h-screen flex flex-col">
         {/* Hero Content */}
         <div className="flex-1 flex items-center pt-24 pb-16">
-          <div className="w-[90%] max-w-[1800px] mx-auto">
+          <div className="w-[90%] container-custom mx-auto">
             <div className="grid lg:grid-cols-12 gap-8 items-center">
               {/* Left Content */}
               <div className="lg:col-span-7 xl:col-span-6">
@@ -162,40 +162,7 @@ export default function Hero() {
                 </p>
 
                 {/* Search Bar */}
-                <form
-                  onSubmit={handleSearch}
-                  className={`relative mb-8 max-w-xl transform transition-all duration-700 delay-300 ${
-                    mounted ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
-                  } ${isSearchFocused ? 'scale-[1.02]' : ''}`}
-                >
-                  <div 
-                    className={`absolute -inset-1 bg-gradient-to-r from-primary/30 to-green-400/30 rounded-2xl blur-lg transition-opacity duration-300 ${
-                      isSearchFocused ? 'opacity-100' : 'opacity-0'
-                    }`} 
-                  />
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onFocus={() => setIsSearchFocused(true)}
-                      onBlur={() => setIsSearchFocused(false)}
-                      placeholder="Search for papers, topics, or courses..."
-                      className={`w-full px-6 py-4 pr-14 border-2 rounded-xl focus:outline-none focus:border-primary transition-all duration-300 ${
-                        isLight 
-                          ? 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 shadow-lg' 
-                          : 'bg-dark-card/90 backdrop-blur-xl border-dark-lighter/50 text-white placeholder:text-gray-500 shadow-xl'
-                      }`}
-                    />
-                    <button
-                      type="submit"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-primary rounded-lg text-white hover:bg-primary-dark transition-all duration-200 hover:scale-105"
-                      aria-label="Search"
-                    >
-                      <Search className="w-5 h-5" />
-                    </button>
-                  </div>
-                </form>
+               
                 
                 {/* CTA Buttons */}
                 <div 

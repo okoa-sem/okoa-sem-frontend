@@ -40,7 +40,7 @@ export default function EmailPasswordForm({ onSubmit, isLoading = false }: Email
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!validateForm()) {
       return
     }
@@ -71,9 +71,8 @@ export default function EmailPasswordForm({ onSubmit, isLoading = false }: Email
               setEmail(e.target.value)
               if (errors.email) setErrors({ ...errors, email: undefined })
             }}
-            className={`w-full pl-10 pr-3 py-2.5 bg-dark border rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-              errors.email ? 'border-red-500' : 'border-[#2A2A2A]'
-            }`}
+            className={`w-full pl-10 pr-3 py-2.5 bg-dark border rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all h-[40px] ${errors.email ? 'border-red-500' : 'border-[#2A2A2A]'
+              }`}
             placeholder="your.email@example.com"
             disabled={isLoading}
           />
@@ -103,9 +102,8 @@ export default function EmailPasswordForm({ onSubmit, isLoading = false }: Email
               setPassword(e.target.value)
               if (errors.password) setErrors({ ...errors, password: undefined })
             }}
-            className={`w-full pl-10 pr-10 py-2.5 bg-dark border rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-              errors.password ? 'border-red-500' : 'border-[#2A2A2A]'
-            }`}
+            className={`w-full pl-10 pr-10 py-2.5 bg-dark border h-[40px] rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all ${errors.password ? 'border-red-500' : 'border-[#2A2A2A]'
+              }`}
             placeholder="Enter your password"
             disabled={isLoading}
           />
