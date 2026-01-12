@@ -21,12 +21,12 @@ export default function RegisterFormPanel() {
   const [tempEmail, setTempEmail] = useState('')
 
   // Step 1: Handle Initial Registration
-  const handleRegister = async (name: string, email: string, password: string) => {
+  const handleRegister = async (displayName: string, email: string, password: string, institution: string) => {
     setIsLoading(true)
     setError(null)
     try {
       // 1. Register user -> triggers OTP email
-      await register({ displayName: name, email, password })
+      await register({ displayName, email, password, institution })
       
       // 2. Move to OTP step
       setTempEmail(email)

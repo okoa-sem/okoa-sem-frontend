@@ -1,23 +1,34 @@
 'use client'
 
 import { useState } from 'react'
-import { Mail, Lock, Eye, EyeOff, AlertCircle, User } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, AlertCircle, User, School, ChevronDown } from 'lucide-react'
 
 interface EmailPasswordRegisterFormProps {
-  onSubmit: (name: string, email: string, password: string) => Promise<void>
+  onSubmit: (displayName: string, email: string, password: string, institution: string) => Promise<void>
   isLoading?: boolean
 }
 
+const institutions = [
+  { value: '', label: 'Select your institution', disabled: true },
+  { value: 'MERU_UNIVERSITY', label: 'Meru University of Science and Technology' },
+  { value: 'UON', label: 'University of Nairobi' },
+  { value: 'JKUAT', label: 'Jomo Kenyatta University of Agriculture and Technology' },
+  { value: 'KU', label: 'Kenyatta University' },
+  { value: 'TUK', label: 'Technical University of Kenya' },
+]
+
 export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false }: EmailPasswordRegisterFormProps) {
-  const [name, setName] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [institution, setInstitution] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errors, setErrors] = useState<{ 
-    name?: string
+    displayName?: string
     email?: string
+    institution?: string
     password?: string
     confirmPassword?: string 
   }>({})
@@ -29,22 +40,27 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
 
   const validateForm = () => {
     const newErrors: { 
-      name?: string
+      displayName?: string
       email?: string
+      institution?: string
       password?: string
       confirmPassword?: string 
     } = {}
 
-    if (!name) {
-      newErrors.name = 'Name is required'
-    } else if (name.length < 2) {
-      newErrors.name = 'Name must be at least 2 characters'
+    if (!displayName) {
+      newErrors.displayName = 'Name is required'
+    } else if (displayName.length < 2) {
+      newErrors.displayName = 'Name must be at least 2 characters'
     }
 
     if (!email) {
       newErrors.email = 'Email is required'
     } else if (!validateEmail(email)) {
       newErrors.email = 'Please enter a valid email'
+    }
+
+    if (!institution) {
+      newErrors.institution = 'Please select your institution'
     }
 
     if (!password) {
@@ -73,7 +89,7 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
     }
 
     try {
-      await onSubmit(name, email, password)
+      await onSubmit(displayName, email, password, institution)
     } catch (error) {
       // Error handling is done in the parent component
     }
@@ -81,9 +97,9 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {/* Name Input */}
+      {/* Display Name Input */}
       <div>
-        <label htmlFor="name" className="block text-xs font-medium text-text-gray mb-1">
+        <label htmlFor="displayName" className="block text-xs font-medium text-text-gray mb-1">
           Full Name
         </label>
         <div className="relative">
@@ -91,24 +107,25 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
             <User className="h-4 w-4 text-text-gray" />
           </div>
           <input
-            id="name"
+            id="displayName"
             type="text"
-            value={name}
+            value={displayName}
             onChange={(e) => {
-              setName(e.target.value)
-              if (errors.name) setErrors({ ...errors, name: undefined })
+              setDisplayName(e.target.value)
+              if (errors.displayName) setErrors({ ...errors, displayName: undefined })
             }}
-            className={`w-full pl-10 pr-3 py-2.5 bg-dark border rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-              errors.name ? 'border-red-500' : 'border-[#2A2A2A]'
-            }`}
             placeholder="John Doe"
-            disabled={isLoading}
+            className={`w-full pl-10 pr-3 py-2.5 text-sm bg-dark-card border rounded-lg transition-colors duration-200 focus:outline-none focus:ring-0 ${
+              errors.displayName 
+                ? 'border-red-500/50 text-red-500 placeholder-red-500/70 focus:border-red-500' 
+                : 'border-white/10 text-white placeholder-text-gray focus:border-primary'
+            }`}
           />
         </div>
-        {errors.name && (
-          <div className="flex items-center gap-1 mt-1 text-red-500 text-xs">
-            <AlertCircle className="h-3 w-3" />
-            <span>{errors.name}</span>
+        {errors.displayName && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-red-500">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <p className="text-xs">{errors.displayName}</p>
           </div>
         )}
       </div>
@@ -116,7 +133,7 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
       {/* Email Input */}
       <div>
         <label htmlFor="email" className="block text-xs font-medium text-text-gray mb-1">
-          Email
+          Email Address
         </label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -130,24 +147,65 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
               setEmail(e.target.value)
               if (errors.email) setErrors({ ...errors, email: undefined })
             }}
-            className={`w-full pl-10 pr-3 py-2.5 bg-dark border rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-              errors.email ? 'border-red-500' : 'border-[#2A2A2A]'
+            placeholder="you@example.com"
+            className={`w-full pl-10 pr-3 py-2.5 text-sm bg-dark-card border rounded-lg transition-colors duration-200 focus:outline-none focus:ring-0 ${
+              errors.email 
+                ? 'border-red-500/50 text-red-500 placeholder-red-500/70 focus:border-red-500' 
+                : 'border-white/10 text-white placeholder-text-gray focus:border-primary'
             }`}
-            placeholder="your.email@example.com"
-            disabled={isLoading}
           />
         </div>
         {errors.email && (
-          <div className="flex items-center gap-1 mt-1 text-red-500 text-xs">
-            <AlertCircle className="h-3 w-3" />
-            <span>{errors.email}</span>
+          <div className="mt-1.5 flex items-center gap-1.5 text-red-500">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <p className="text-xs">{errors.email}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Institution Select */}
+      <div>
+        <label htmlFor="institution" className="block text-xs font-medium text-text-gray mb-1">
+          Institution
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <School className="h-4 w-4 text-text-gray" />
+          </div>
+          <select
+            id="institution"
+            value={institution}
+            onChange={(e) => {
+              setInstitution(e.target.value)
+              if (errors.institution) setErrors({ ...errors, institution: undefined })
+            }}
+            className={`w-full pl-10 pr-10 py-2.5 text-sm bg-dark-card border rounded-lg transition-colors duration-200 appearance-none focus:outline-none focus:ring-0 ${
+              errors.institution 
+                ? 'border-red-500/50 text-red-500 placeholder-red-500/70 focus:border-red-500' 
+                : 'border-white/10 text-white placeholder-text-gray focus:border-primary'
+            } ${!institution ? 'text-text-gray' : 'text-white'}`}
+          >
+            {institutions.map(inst => (
+              <option key={inst.value} value={inst.value} disabled={inst.disabled} className="bg-dark-card text-white">
+                {inst.label}
+              </option>
+            ))}
+          </select>
+          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+            <ChevronDown className="h-4 w-4 text-text-gray" />
+          </div>
+        </div>
+        {errors.institution && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-red-500">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <p className="text-xs">{errors.institution}</p>
           </div>
         )}
       </div>
 
       {/* Password Input */}
       <div>
-        <label htmlFor="password" className="block text-xs font-medium text-text-gray mb-1">
+        <label htmlFor="password-register" className="block text-xs font-medium text-text-gray mb-1">
           Password
         </label>
         <div className="relative">
@@ -155,39 +213,40 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
             <Lock className="h-4 w-4 text-text-gray" />
           </div>
           <input
-            id="password"
+            id="password-register"
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => {
               setPassword(e.target.value)
               if (errors.password) setErrors({ ...errors, password: undefined })
             }}
-            className={`w-full pl-10 pr-10 py-2.5 bg-dark border rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-              errors.password ? 'border-red-500' : 'border-[#2A2A2A]'
+            placeholder="••••••••"
+            className={`w-full pl-10 pr-10 py-2.5 text-sm bg-dark-card border rounded-lg transition-colors duration-200 focus:outline-none focus:ring-0 ${
+              errors.password 
+                ? 'border-red-500/50 text-red-500 placeholder-red-500/70 focus:border-red-500' 
+                : 'border-white/10 text-white placeholder-text-gray focus:border-primary'
             }`}
-            placeholder="Min 8 chars, uppercase, number"
-            disabled={isLoading}
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-gray hover:text-white transition-colors"
-            disabled={isLoading}
+            className="absolute inset-y-0 right-0 px-3 flex items-center text-text-gray hover:text-white"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
         {errors.password && (
-          <div className="flex items-center gap-1 mt-1 text-red-500 text-xs">
-            <AlertCircle className="h-3 w-3" />
-            <span>{errors.password}</span>
+          <div className="mt-1.5 flex items-center gap-1.5 text-red-500">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <p className="text-xs">{errors.password}</p>
           </div>
         )}
       </div>
 
       {/* Confirm Password Input */}
       <div>
-        <label htmlFor="confirmPassword" className="block text-xs font-medium text-text-gray mb-1">
+        <label htmlFor="confirm-password" className="block text-xs font-medium text-text-gray mb-1">
           Confirm Password
         </label>
         <div className="relative">
@@ -195,44 +254,50 @@ export default function EmailPasswordRegisterForm({ onSubmit, isLoading = false 
             <Lock className="h-4 w-4 text-text-gray" />
           </div>
           <input
-            id="confirmPassword"
+            id="confirm-password"
             type={showConfirmPassword ? 'text' : 'password'}
             value={confirmPassword}
             onChange={(e) => {
               setConfirmPassword(e.target.value)
               if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: undefined })
             }}
-            className={`w-full pl-10 pr-10 py-2.5 bg-dark border rounded-lg text-sm text-white placeholder-text-gray focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-              errors.confirmPassword ? 'border-red-500' : 'border-[#2A2A2A]'
+            placeholder="••••••••"
+            className={`w-full pl-10 pr-10 py-2.5 text-sm bg-dark-card border rounded-lg transition-colors duration-200 focus:outline-none focus:ring-0 ${
+              errors.confirmPassword 
+                ? 'border-red-500/50 text-red-500 placeholder-red-500/70 focus:border-red-500' 
+                : 'border-white/10 text-white placeholder-text-gray focus:border-primary'
             }`}
-            placeholder="Confirm your password"
-            disabled={isLoading}
           />
           <button
             type="button"
             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-gray hover:text-white transition-colors"
-            disabled={isLoading}
+            className="absolute inset-y-0 right-0 px-3 flex items-center text-text-gray hover:text-white"
+            aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
           >
             {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
         {errors.confirmPassword && (
-          <div className="flex items-center gap-1 mt-1 text-red-500 text-xs">
-            <AlertCircle className="h-3 w-3" />
-            <span>{errors.confirmPassword}</span>
+          <div className="mt-1.5 flex items-center gap-1.5 text-red-500">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <p className="text-xs">{errors.confirmPassword}</p>
           </div>
         )}
       </div>
 
-      {/* Submit Button */}
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="w-full py-2.5 bg-primary text-white rounded-lg font-semibold text-sm transition-all hover:bg-primary-dark hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 mt-4"
-      >
-        {isLoading ? 'Creating Account...' : 'Create Account'}
-      </button>
+      <div className="pt-2">
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full py-3 bg-primary text-dark rounded-lg font-semibold text-sm hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 disabled:bg-primary/50 disabled:cursor-not-allowed flex items-center justify-center"
+        >
+          {isLoading ? (
+            <div className="w-5 h-5 border-2 border-dark border-t-transparent rounded-full animate-spin" />
+          ) : (
+            'Create Account'
+          )}
+        </button>
+      </div>
     </form>
   )
 }

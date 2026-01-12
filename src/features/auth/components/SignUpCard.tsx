@@ -43,7 +43,7 @@ export default function SignUpCard() {
      
       console.log('Initiating Google Sign-In...')
     
-      alert('Google Sign-In would be implemented here.\n\nIn a real application, this would:\n1. Open Google OAuth flow\n2. Authenticate the user\n3. Create/update user profile\n4. Redirect to dashboard')
+      alert('Google Sign-In would be implemented here.\n\nIn a real application, this would:\n1. Open Google OAuth flow\n2. Authenticate the user\n3. Create/update user profile\n4. Redirect to homepage')
     } catch (error: any) {
       console.error('Sign-in error:', error)
       setError(error.message || 'Google sign-in failed. Please try again.')

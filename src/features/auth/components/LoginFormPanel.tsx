@@ -53,7 +53,7 @@ export default function LoginFormPanel() {
       localStorage.setItem('user', JSON.stringify(response.user))
 
       // 4. Redirect
-      router.push('/dashboard') 
+      router.push('/') 
     } catch (error: any) {
       setError(error.message)
     } finally {

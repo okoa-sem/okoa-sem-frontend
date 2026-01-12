@@ -123,7 +123,7 @@ export const ROUTES = {
   GET_STARTED: '/register',
   LOGIN: '/login',
   SIGNUP: '/register',
-  DASHBOARD: '/dashboard',
+  DASHBOARD: '/',
   MY_ACCOUNT: '/profile',
   DOWNLOADS: '/downloads',
   PAPERS: '/papers',

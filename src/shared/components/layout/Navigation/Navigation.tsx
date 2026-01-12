@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, User, ChevronDown } from 'lucide-react'
+import { Menu, X, User } from 'lucide-react'
 import ThemeToggle from '@/shared/components/ThemeToggle'
 import { ROUTES } from '@/shared/constants'
+import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
+import ProfileDropdown from './ProfileDropdown'
 
 const navLinks = [
   { href: ROUTES.PAST_PAPERS, label: 'Past Papers' },
@@ -19,6 +21,7 @@ export default function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isLight, setIsLight] = useState(false)
   const pathname = usePathname()
+  const { isAuthenticated } = useAuth()
   
   const isHomePage = pathname === '/'
 
@@ -121,38 +124,31 @@ export default function Navigation() {
                 <ThemeToggle />
               </div>
 
-              {/* Login Button */}
-              <Link
-                href={ROUTES.LOGIN}
-                className={`hidden sm:inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-200 rounded-lg ${
-                  isLight 
-                    ? 'bg-white text-primary border-2 border-primary hover:bg-primary/5 shadow-sm' 
-                    : 'bg-dark-card text-primary border-2 border-primary/50 hover:border-primary hover:bg-primary/5 shadow-lg shadow-primary/10'
-                }`}
-              >
-                Login
-              </Link>
+              {isAuthenticated ? (
+                <ProfileDropdown />
+              ) : (
+                <>
+                  {/* Login Button */}
+                  <Link
+                    href={ROUTES.LOGIN}
+                    className={`hidden sm:inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-200 rounded-lg ${
+                      isLight 
+                        ? 'bg-white text-primary border-2 border-primary hover:bg-primary/5 shadow-sm' 
+                        : 'bg-dark-card text-primary border-2 border-primary/50 hover:border-primary hover:bg-primary/5 shadow-lg shadow-primary/10'
+                    }`}
+                  >
+                    Login
+                  </Link>
 
-              {/* Sign Up CTA */}
-              <Link
-                href={ROUTES.SIGNUP}
-                className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-dark rounded-lg text-sm font-semibold hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20"
-              >
-                Register
-              </Link>
-
-              {/* Account link - On far right */}
-              <Link
-                href={ROUTES.MY_ACCOUNT}
-                className={`hidden sm:flex items-center gap-2 px-3 py-2 text-sm transition-colors ml-2 ${
-                  isLight 
-                    ? 'text-gray-700 hover:text-primary' 
-                    : 'text-gray-300 hover:text-white'
-                }`}
-              >
-                <User className="w-4 h-4" />
-                <span className="hidden lg:inline">Account</span>
-              </Link>
+                  {/* Sign Up CTA */}
+                  <Link
+                    href={ROUTES.SIGNUP}
+                    className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-dark rounded-lg text-sm font-semibold hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20"
+                  >
+                    Register
+                  </Link>
+                </>
+              )}
 
               {/* Mobile Menu Button  */}
               <button
@@ -208,7 +204,6 @@ export default function Navigation() {
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     {link.label}
-                    <ChevronDown className={`w-5 h-5 -rotate-90 ${isLight ? 'text-gray-400' : 'text-gray-500'}`} />
                   </Link>
                 ))}
               </nav>
@@ -221,39 +216,44 @@ export default function Navigation() {
                 <div className="flex items-center justify-center gap-3 mb-2">
                   <ThemeToggle />
                 </div>
-                <Link
-                  href={ROUTES.LOGIN}
-                  onClick={closeMobileMenu}
-                  className={`w-full py-4 rounded-xl font-semibold text-center border-2 transition-all animate-fadeInUp active:scale-[0.98] ${
-                    isLight 
-                      ? 'bg-white text-primary border-primary hover:bg-primary/5' 
-                      : 'bg-dark-card text-primary border-primary/50 hover:border-primary hover:bg-primary/5'
-                  }`}
-                  style={{ animationDelay: '200ms' }}
-                >
-                  Login
-                </Link>
-                <Link
-                  href={ROUTES.SIGNUP}
-                  onClick={closeMobileMenu}
-                  className="w-full py-4 bg-primary text-dark rounded-xl font-semibold text-center animate-fadeInUp active:scale-[0.98]"
-                  style={{ animationDelay: '250ms' }}
-                >
-                  Register
-                </Link>
-                <Link
-                  href={ROUTES.MY_ACCOUNT}
-                  onClick={closeMobileMenu}
-                  className={`w-full py-4 rounded-xl font-semibold text-center flex items-center justify-center gap-2 animate-fadeInUp active:scale-[0.98] ${
-                    isLight 
-                      ? 'bg-gray-100 text-gray-900' 
-                      : 'bg-white/5 text-white'
-                  }`}
-                  style={{ animationDelay: '300ms' }}
-                >
-                  <User className="w-5 h-5" />
-                  My Account
-                </Link>
+                {isAuthenticated ? (
+                  <Link
+                    href={ROUTES.MY_ACCOUNT}
+                    onClick={closeMobileMenu}
+                    className={`w-full py-4 rounded-xl font-semibold text-center flex items-center justify-center gap-2 animate-fadeInUp active:scale-[0.98] ${
+                      isLight 
+                        ? 'bg-gray-100 text-gray-900' 
+                        : 'bg-white/5 text-white'
+                    }`}
+                    style={{ animationDelay: '300ms' }}
+                  >
+                    <User className="w-5 h-5" />
+                    My Account
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      href={ROUTES.LOGIN}
+                      onClick={closeMobileMenu}
+                      className={`w-full py-4 rounded-xl font-semibold text-center border-2 transition-all animate-fadeInUp active:scale-[0.98] ${
+                        isLight 
+                          ? 'bg-white text-primary border-primary hover:bg-primary/5' 
+                          : 'bg-dark-card text-primary border-primary/50 hover:border-primary hover:bg-primary/5'
+                      }`}
+                      style={{ animationDelay: '200ms' }}
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href={ROUTES.SIGNUP}
+                      onClick={closeMobileMenu}
+                      className="w-full py-4 bg-primary text-dark rounded-xl font-semibold text-center animate-fadeInUp active:scale-[0.98]"
+                      style={{ animationDelay: '250ms' }}
+                    >
+                      Register
+                    </Link>
+                  </>
+                )}
               </div>
 
               {/* Mobile footer info */}
