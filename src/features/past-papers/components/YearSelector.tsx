@@ -30,7 +30,7 @@ export default function YearSelector({ years, selectedYear, schoolAbbreviation, 
       <div ref={dropdownRef} className="relative inline-block">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-3 px-6 py-4 bg-dark-card border-2 border-dark-lighter rounded-xl text-white hover:border-primary transition-colors"
+          className="flex items-center gap-3 px-6 py-4 bg-dark-card border-2 border-dark-lighter rounded-xl text-white hover:border-primary hover:shadow-lg hover:shadow-primary/20 transition-all"
         >
           <span className="font-semibold text-lg">
             {selectedYear ? (
@@ -56,10 +56,10 @@ export default function YearSelector({ years, selectedYear, schoolAbbreviation, 
                     onYearChange(year)
                     setIsOpen(false)
                   }}
-                  className={`w-full px-5 py-3 text-left transition-colors ${
+                  className={`w-full px-5 py-3 text-left transition-all ${
                     selectedYear === year
-                      ? 'bg-primary text-dark font-semibold'
-                      : 'text-white hover:bg-dark-lighter'
+                      ? 'bg-primary text-dark font-semibold shadow-lg shadow-primary/30'
+                      : 'text-white hover:bg-[#00C853]/20 hover:text-[#00C853] hover:shadow-md hover:shadow-[#00C853]/10'
                   }`}
                 >
                   {year} {schoolAbbreviation} Past Papers

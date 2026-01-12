@@ -549,24 +549,7 @@ body.light-theme .preview-modal button:has(svg):last-child:hover {
   color: var(--color-primary) !important;
 }
 
-/* Year selector dropdown light theme */
-body.light-theme .year-dropdown {
-  background-color: var(--color-light-card) !important;
-  border-color: #E5E7EB !important;
-}
 
-body.light-theme .year-dropdown button {
-  color: var(--color-light-text) !important;
-}
-
-body.light-theme .year-dropdown button:hover {
-  background-color: #E0E7FF !important;
-}
-
-body.light-theme .year-dropdown button:has(.bg-primary) {
-  background-color: var(--color-primary) !important;
-  color: var(--color-dark) !important;
-}
 
 /* Year dropdown scrollbar light theme */
 body.light-theme .year-dropdown .custom-scrollbar::-webkit-scrollbar {

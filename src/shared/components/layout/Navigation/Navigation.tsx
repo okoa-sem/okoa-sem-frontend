@@ -75,7 +75,7 @@ export default function Navigation() {
     }
     
     if (isHomePage && !isScrolled && !isMobileMenuOpen) {
-      return 'bg-transparent'
+      return 'bg-transparent border-b border-white/10'
     }
     
     return 'bg-dark/95 backdrop-blur-xl border-b border-white/10 shadow-lg shadow-black/20'
@@ -154,7 +154,7 @@ export default function Navigation() {
                 <span className="hidden lg:inline">Account</span>
               </Link>
 
-              {/* Mobile Menu Button - Improved touch target */}
+              {/* Mobile Menu Button  */}
               <button
                 type="button"
                 onClick={toggleMobileMenu}
@@ -177,7 +177,7 @@ export default function Navigation() {
         </div>
       </nav>
 
-      {/* Mobile Menu - Separate from nav for better z-index control */}
+      {/* Mobile Menu  */}
       {isMobileMenuOpen && (
         <>
           {/* Backdrop */}
