@@ -8,6 +8,7 @@ import GoogleSignInButton from './GoogleSignInButton'
 import EmailPasswordRegisterForm from './EmailPasswordRegisterForm'
 import OtpVerificationForm from './OtpVerificationForm'
 import { register, verifyEmail, resendOtp } from '@/features/auth/services/authService'
+import { handleAuthError } from '@/shared/utils/errorHandler'
 
 type AuthStep = 'DETAILS' | 'OTP'
 
@@ -32,7 +33,7 @@ export default function RegisterFormPanel() {
       setTempEmail(email)
       setStep('OTP')
     } catch (error: any) {
-      setError(error.message)
+      setError(handleAuthError(error))
     } finally {
       setIsLoading(false)
     }
@@ -52,7 +53,7 @@ export default function RegisterFormPanel() {
       alert('Account verified! Please log in.')
       router.push('/login')
     } catch (error: any) {
-      setError(error.message)
+      setError(handleAuthError(error))
     } finally {
       setIsLoading(false)
     }

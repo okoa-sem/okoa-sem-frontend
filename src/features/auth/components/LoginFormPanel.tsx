@@ -8,6 +8,7 @@ import GoogleSignInButton from './GoogleSignInButton'
 import EmailPasswordForm from './EmailPasswordForm'
 import OtpVerificationForm from './OtpVerificationForm'
 import { login, verifyLogin2FA, resendOtp } from '@/features/auth/services/authService'
+import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 
 type LoginStep = 'CREDENTIALS' | '2FA'
 
@@ -16,6 +17,7 @@ export default function LoginFormPanel() {
   const [step, setStep] = useState<LoginStep>('CREDENTIALS')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { login: authLogin } = useAuth()
   const [tempEmail, setTempEmail] = useState('')
 
   // Step 1: Authenticate Credentials
@@ -47,10 +49,9 @@ export default function LoginFormPanel() {
         type: 'LOGIN_2FA'
       })
 
-      // 3. Store tokens
-      localStorage.setItem('authToken', response.accessToken)
+      // 3. Store tokens and user data in context
+      authLogin(response.user, response.accessToken)
       localStorage.setItem('refreshToken', response.refreshToken)
-      localStorage.setItem('user', JSON.stringify(response.user))
 
       // 4. Redirect
       router.push('/') 

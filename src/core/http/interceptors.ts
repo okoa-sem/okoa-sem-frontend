@@ -1,5 +1,6 @@
 import { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import { refreshToken } from '@/features/auth/services/authService'
+import { handleTokenRefreshError } from '@/shared/utils/errorHandler'
 
 let isRefreshing = false
 let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: any) => void }[] = []
@@ -85,13 +86,7 @@ const setupResponseInterceptor = (axiosInstance: AxiosInstance) => {
       return axiosInstance(originalRequest)
     } catch (refreshError: any) {
       processQueue(refreshError, null)
-      // Handle logout 
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('refreshToken')
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
-      }
-      return Promise.reject(refreshError)
+      return handleTokenRefreshError(refreshError)
     } finally {
       isRefreshing = false
     }
