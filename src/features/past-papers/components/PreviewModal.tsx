@@ -45,10 +45,10 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => onGenerateMarkingScheme(paper)}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg font-medium text-sm hover:bg-amber-500/30 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-primary/20 text-primary rounded-lg font-medium text-sm hover:bg-primary/30 transition-colors"
             >
               <Award className="w-4 h-4" />
-              <span className="hidden sm:inline">Mark Scheme</span>
+              <span className="hidden sm:inline">Generate Marking Scheme</span>
             </button>
             
             <button
@@ -70,43 +70,9 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
 
         {/* PDF Preview Area */}
         <div className="flex-1 bg-dark overflow-hidden">
-          {/* Placeholder for PDF preview - In production, use a PDF viewer library */}
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="text-center p-8">
-              <div className="w-24 h-24 rounded-2xl bg-dark-card mx-auto mb-6 flex items-center justify-center">
-                <FileText className="w-12 h-12 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-2">
-                {paper.courseCode}
-              </h3>
-              <p className="text-text-gray mb-6 max-w-md">
-                {paper.courseName} - {paper.examType === 'cat' ? 'CAT' : paper.examType.charAt(0).toUpperCase() + paper.examType.slice(1)} Examination
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <button
-                  onClick={() => onGenerateMarkingScheme(paper)}
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-amber-500/20 text-amber-400 rounded-xl font-semibold hover:bg-amber-500/30 transition-colors"
-                >
-                  <Award className="w-5 h-5" />
-                  Generate Marking Scheme
-                </button>
-                
-                <a
-                  href={paper.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-dark-lighter text-white rounded-xl font-semibold hover:bg-dark-lighter/80 transition-colors"
-                >
-                  <ExternalLink className="w-5 h-5" />
-                  Open in New Tab
-                </a>
-              </div>
-              
-              <p className="text-text-gray text-sm mt-6">
-                Downloaded {paper.downloads.toLocaleString()} times
-              </p>
-            </div>
+          {/* PDF Viewer would go here */}
+          <div className="w-full h-full flex items-center justify-center text-text-gray">
+             Preview not available
           </div>
         </div>
       </div>

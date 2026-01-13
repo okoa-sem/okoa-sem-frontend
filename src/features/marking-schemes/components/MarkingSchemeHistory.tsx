@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { MarkingScheme, PastPaper } from '@/types'
 import { FileText, Trash2, Eye, Download, Search, History } from 'lucide-react'
+import DeleteConfirmationModal from './DeleteConfirmationModal'
 
 interface MarkingSchemeHistoryProps {
   schemes: MarkingScheme[]
@@ -17,6 +18,7 @@ export default function MarkingSchemeHistory({
 }: MarkingSchemeHistoryProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
+  const [schemeToDelete, setSchemeToDelete] = useState<string | null>(null)
 
   const filteredAndSortedSchemes = useMemo(() => {
     let filtered = schemes
@@ -119,7 +121,7 @@ export default function MarkingSchemeHistory({
                 {/* Paper Info */}
                 <div className="flex items-start gap-4 flex-1 min-w-0">
                   <div className="w-12 h-12 rounded-xl bg-dark-lighter flex items-center justify-center flex-shrink-0">
-                    <Award className="w-6 h-6 text-amber-400" />
+                    <Award className="w-6 h-6 text-primary" />
                   </div>
                   
                   <div className="flex-1 min-w-0">
@@ -157,11 +159,7 @@ export default function MarkingSchemeHistory({
                   
                   {onDelete && (
                     <button
-                      onClick={() => {
-                        if (confirm('Are you sure you want to delete this marking scheme?')) {
-                          onDelete(scheme.id)
-                        }
-                      }}
+                      onClick={() => setSchemeToDelete(scheme.id)}
                       className="flex items-center gap-2 px-4 py-2.5 bg-red-500/20 text-red-400 rounded-lg font-medium text-sm hover:bg-red-500/30 transition-colors"
                       title="Delete"
                     >
@@ -175,6 +173,18 @@ export default function MarkingSchemeHistory({
           ))
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={!!schemeToDelete}
+        onClose={() => setSchemeToDelete(null)}
+        onConfirm={() => {
+          if (schemeToDelete && onDelete) {
+            onDelete(schemeToDelete)
+          }
+        }}
+        title="Delete Marking Scheme"
+        message="Are you sure you want to delete this marking scheme? This action cannot be undone."
+      />
     </div>
   )
 }

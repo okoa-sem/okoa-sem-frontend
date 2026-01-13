@@ -76,7 +76,7 @@ export default function MarkingSchemesPage() {
             
             <div className="text-center">
               <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
-                My <span className="text-amber-400">Marking Schemes</span>
+                My <span className="text-primary">Marking Schemes</span>
               </h1>
               <p className="text-text-gray text-lg max-w-2xl mx-auto">
                 View and manage all the marking schemes you've generated for past papers.

@@ -113,14 +113,7 @@ export default function AIAssistantSection() {
       />
 
       <div className="container-custom relative z-10">
-        <div 
-          style={{
-            display: 'grid',
-            gridTemplateColumns: window.innerWidth > 1024 ? '1fr 1fr' : '1fr',
-            gap: '80px',
-            alignItems: 'center',
-          }}
-        >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
           {/* Left Content */}
           <div>
             {/* Section Label */}

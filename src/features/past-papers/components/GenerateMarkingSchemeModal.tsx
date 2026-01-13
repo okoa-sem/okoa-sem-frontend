@@ -56,7 +56,7 @@ export default function GenerateMarkingSchemeModal({
       setTimeout(() => {
         onClose()
         setIsSuccess(false)
-      }, 3000) // Increased timeout slightly so they can read the message
+      }, 3000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate marking scheme')
     } finally {
@@ -116,18 +116,18 @@ export default function GenerateMarkingSchemeModal({
           )}
 
           {isSuccess && (
-            <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-3 flex items-start gap-2">
-              <Check className="w-4 h-4 text-green-400 mt-0.5" />
-              <p className="text-green-400 text-sm">
+            <div className="bg-primary/20 border border-primary/50 rounded-lg p-3 flex items-start gap-2">
+              <Check className="w-4 h-4 text-primary mt-0.5" />
+              <p className="text-primary text-sm">
                 Marking scheme generated successfully! You can find this in your Marking Scheme History.
               </p>
             </div>
           )}
 
           {isLoading && !isSuccess && (
-            <div className="bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 flex items-center gap-2">
-              <Loader className="w-4 h-4 text-amber-400 animate-spin" />
-              <p className="text-amber-400 text-sm">Generating marking scheme...</p>
+            <div className="bg-primary/20 border border-primary/50 rounded-lg p-3 flex items-center gap-2">
+              <Loader className="w-4 h-4 text-primary animate-spin" />
+              <p className="text-primary text-sm">Generating marking scheme...</p>
             </div>
           )}
 

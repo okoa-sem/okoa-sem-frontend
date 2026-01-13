@@ -53,8 +53,6 @@ export default function PaperCard({ paper, onPreview, onUploadToAI, onGenerateMa
               <span className="text-text-gray">{getSemesterLabel(paper.semester)}</span>
               <span className="text-text-gray">•</span>
               <span className="text-text-gray">{paper.fileSize}</span>
-              <span className="text-text-gray hidden sm:inline">•</span>
-              <span className="text-text-gray hidden sm:inline">{paper.downloads.toLocaleString()} downloads</span>
             </div>
           </div>
         </div>
