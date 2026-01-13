@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AlertCircle } from 'lucide-react'
 import GoogleSignInButton from './GoogleSignInButton'
 import EmailPasswordForm from './EmailPasswordForm'
@@ -14,6 +14,7 @@ type LoginStep = 'CREDENTIALS' | '2FA'
 
 export default function LoginFormPanel() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [step, setStep] = useState<LoginStep>('CREDENTIALS')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,8 +54,11 @@ export default function LoginFormPanel() {
       authLogin(response.user, response.accessToken)
       localStorage.setItem('refreshToken', response.refreshToken)
 
-      // 4. Redirect
-      router.push('/') 
+      // 4. Redirect to the 'next' URL if it exists, otherwise to the homepage
+      const nextParam = searchParams.get('next')
+      const targetUrl = nextParam || '/'
+      
+      window.location.href = targetUrl
     } catch (error: any) {
       setError(error.message)
     } finally {
