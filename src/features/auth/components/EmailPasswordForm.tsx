@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
 
 interface EmailPasswordFormProps {
@@ -48,7 +49,7 @@ export default function EmailPasswordForm({ onSubmit, isLoading = false }: Email
     try {
       await onSubmit(email, password)
     } catch (error) {
-      // Error handling is done in the parent component
+      
     }
   }
 
@@ -125,17 +126,13 @@ export default function EmailPasswordForm({ onSubmit, isLoading = false }: Email
       </div>
 
       {/* Forgot Password Link */}
-      <div className="text-right pt-1">
-        <a
-          href="#"
-          className="text-xs text-primary hover:text-primary-dark transition-colors"
-          onClick={(e) => {
-            e.preventDefault()
-            alert('Password reset functionality would be implemented here')
-          }}
+      <div className="flex items-center justify-end">
+        <Link
+          href="/forgot-password"
+          className="text-xs text-primary hover:text-primary-light transition-colors"
         >
           Forgot password?
-        </a>
+        </Link>
       </div>
 
       {/* Submit Button */}
