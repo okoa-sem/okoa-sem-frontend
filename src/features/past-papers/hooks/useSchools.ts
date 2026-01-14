@@ -14,3 +14,18 @@ export const useSchoolCodes = () => {
     queryFn: papersService.getSchoolCodes,
   });
 };
+
+export const useAllYears = () => {
+  return useQuery({
+    queryKey: ['allYears'],
+    queryFn: papersService.getAllYears,
+  });
+};
+
+export const useYearsBySchool = (schoolId: string | undefined) => {
+  return useQuery({
+    queryKey: ['yearsBySchool', schoolId],
+    queryFn: () => papersService.getYearsBySchool(schoolId!),
+    enabled: !!schoolId,
+  });
+};

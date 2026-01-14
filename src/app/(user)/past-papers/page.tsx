@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PastPaper, MarkingScheme } from '@/types'
 import { PAST_PAPERS_SCHOOLS, generateDemoPastPapers } from '@/shared/constants'
-import { useSchoolCodes, useSchoolNames } from '@/features/past-papers/hooks/useSchools'
+import { useSchoolCodes, useSchoolNames, useAllYears, useYearsBySchool } from '@/features/past-papers/hooks/useSchools'
 import { setSelectedSchoolId } from '@/store/slices/ui.slice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import CompactHeader from '@/shared/components/CompactHeader'
@@ -25,6 +25,7 @@ function PastPapersContent() {
 
   const { data: schoolCodes, isLoading: isLoadingCodes } = useSchoolCodes()
   const { data: schoolNames, isLoading: isLoadingNames } = useSchoolNames()
+  const { data: allYears } = useAllYears()
   
 
   const dynamicSchools = useMemo(() => {
@@ -37,15 +38,17 @@ function PastPapersContent() {
         id: code,
         name: schoolNames[index] || code,
         abbreviation: existing?.abbreviation || code.split('_')[0] || 'N/A',
-        years: existing?.years || [2024, 2023, 2022], // Default years if not found
+        years: allYears || [], // Default to all years from API, specific years loaded on selection
       };
     });
-  }, [schoolCodes, schoolNames]);
+  }, [schoolCodes, schoolNames, allYears]);
 
   const schoolFromUrl = searchParams.get('school')
   
   const resolvedSchoolId = selectedSchoolId || schoolFromUrl || dynamicSchools[0]?.id || ''
   
+  const { data: schoolYears } = useYearsBySchool(resolvedSchoolId)
+
   // State
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -75,8 +78,12 @@ function PastPapersContent() {
 
   // Get current school data
   const currentSchool = useMemo(() => {
-    return dynamicSchools.find(s => s.id === resolvedSchoolId) || dynamicSchools[0]
-  }, [resolvedSchoolId, dynamicSchools])
+    const school = dynamicSchools.find(s => s.id === resolvedSchoolId) || dynamicSchools[0]
+    if (school && schoolYears) {
+      return { ...school, years: schoolYears }
+    }
+    return school
+  }, [resolvedSchoolId, dynamicSchools, schoolYears])
 
   
   useEffect(() => {
@@ -279,7 +286,11 @@ function PastPapersContent() {
                 </p>
               </div>
               <div className="text-sm text-text-gray">
-                Years: <span className="text-primary">{currentSchool.years[currentSchool.years.length - 1]}</span> - <span className="text-primary">{currentSchool.years[0]}</span>
+                {currentSchool.years.length > 0 && (
+                  <>
+                  Years: <span className="text-primary">{currentSchool.years[currentSchool.years.length - 1]}</span> - <span className="text-primary">{currentSchool.years[0]}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
