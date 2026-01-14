@@ -1,7 +1,7 @@
 'use client'
 
-import { useRef } from 'react'
-import { CheckCircle, Calendar, Clock, Camera, Trash2, Loader2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { CheckCircle, Calendar, Clock, Camera, Trash2, Loader2, X, ZoomIn } from 'lucide-react'
 import { UserProfile } from '@/types'
 import { useProfileImage } from '../hooks/useProfileImage'
 
@@ -17,6 +17,8 @@ export default function ProfileHeader({ user }: ProfileHeaderProps) {
     removeProfileImage, 
     isRemoving, 
   } = useProfileImage()
+
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false)
 
   const formattedMemberDate = new Date(user.memberSince || user.createdAt).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -38,14 +40,23 @@ export default function ProfileHeader({ user }: ProfileHeaderProps) {
       {/* Profile Image */}
       <div className="flex flex-col items-center text-center mb-6">
         <div className="relative mb-4 group">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-4xl font-bold text-dark overflow-hidden relative">
+          <div 
+            className={`w-24 h-24 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-4xl font-bold text-dark overflow-hidden relative ${profileImage ? 'cursor-pointer' : ''}`}
+            onClick={() => profileImage && setIsImageModalOpen(true)}
+          >
             {profileImage ? (
-            
-              <img src={profileImage} alt={user.name} className="w-full h-full object-cover" />
+              <img src={profileImage} alt={user.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
             ) : (
               user.name.charAt(0).toUpperCase()
             )}
             
+            {/* Hover overlay hint */}
+            {profileImage && !isUploading && !isRemoving && (
+               <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
+                 <ZoomIn className="w-6 h-6 text-white" />
+               </div>
+             )}
+
             {/* Loading Overlay */}
             {(isUploading || isRemoving) && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -132,6 +143,28 @@ export default function ProfileHeader({ user }: ProfileHeaderProps) {
           </div>
         </div>
       </div>
+
+      {/* Image Modal */}
+      {isImageModalOpen && profileImage && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <button 
+            onClick={() => setIsImageModalOpen(false)}
+            className="absolute top-4 right-4 p-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          
+          <img 
+            src={profileImage} 
+            alt={user.name} 
+            className="max-w-full max-h-[90vh] object-contain rounded-lg animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+          />
+        </div>
+      )}
     </div>
   )
 }

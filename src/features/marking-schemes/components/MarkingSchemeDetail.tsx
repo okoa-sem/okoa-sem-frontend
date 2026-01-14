@@ -1,7 +1,7 @@
 'use client'
 
 import { MarkingScheme } from '@/types'
-import { X, Copy, Share2 } from 'lucide-react'
+import { X, Copy, Share2, Maximize2, Minimize2 } from 'lucide-react'
 import { useState } from 'react'
 
 interface MarkingSchemeDetailProps {
@@ -16,6 +16,7 @@ export default function MarkingSchemeDetail({
   onClose 
 }: MarkingSchemeDetailProps) {
   const [copied, setCopied] = useState(false)
+  const [isFullScreen, setIsFullScreen] = useState(false)
 
   if (!isOpen || !scheme) return null
 
@@ -37,10 +38,14 @@ export default function MarkingSchemeDetail({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
-      <div className="bg-dark-card w-full max-w-4xl h-[90vh] rounded-2xl overflow-hidden border border-dark-lighter shadow-2xl flex flex-col">
+      <div className={`bg-dark-card flex flex-col transition-all duration-300 ${
+        isFullScreen 
+          ? 'w-full h-full rounded-none' 
+          : 'w-full max-w-4xl h-[90vh] rounded-2xl overflow-hidden border border-dark-lighter shadow-2xl m-4'
+      }`}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-dark-lighter flex-shrink-0">
           <div>
@@ -62,6 +67,14 @@ export default function MarkingSchemeDetail({
               <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
             </button>
             
+            <button
+              onClick={() => setIsFullScreen(!isFullScreen)}
+              className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
+              title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+            >
+              {isFullScreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+
             <button
               onClick={onClose}
               className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
