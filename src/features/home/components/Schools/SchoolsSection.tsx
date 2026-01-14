@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { SCHOOLS, ROUTES } from '@/shared/constants'
+import { useSchoolCodes, useSchoolNames } from '@/features/past-papers/hooks/useSchools'
 
 const colorClasses = {
   blue: 'bg-blue-500/20 text-blue-400',
@@ -15,8 +16,12 @@ const colorClasses = {
   teal: 'bg-teal-500/20 text-teal-400',
 }
 
+const colors = Object.keys(colorClasses) as (keyof typeof colorClasses)[]
+
 export default function SchoolsSection() {
   const [isLight, setIsLight] = useState(false)
+  const { data: schoolCodes, isLoading: isLoadingCodes } = useSchoolCodes()
+  const { data: schoolNames, isLoading: isLoadingNames } = useSchoolNames()
 
   useEffect(() => {
     const checkTheme = () => {
@@ -38,6 +43,25 @@ export default function SchoolsSection() {
     return () => observer.disconnect()
   }, [])
 
+  const schools = useMemo(() => {
+    if (!schoolCodes || !schoolNames) return [];
+
+    return schoolCodes.map((code, index) => {
+      const existing = SCHOOLS.find(s => s.id === code);
+      const color = existing?.color || colors[index % colors.length];
+      
+      return {
+        id: code,
+        name: schoolNames[index] || code,
+        abbreviation: existing?.abbreviation || code.slice(0, 3).toUpperCase(),
+        color,
+        description: existing?.description || `Explore past papers for ${schoolNames[index] || code}`,
+      };
+    });
+  }, [schoolCodes, schoolNames]);
+
+  const isLoading = isLoadingCodes || isLoadingNames;
+
   return (
     <section 
       id="schools" 
@@ -58,71 +82,67 @@ export default function SchoolsSection() {
         </div>
 
         {/* Schools Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {SCHOOLS.map((school, index) => (
-            <div
-              key={school.id}
-              className="bg-dark border border-dark-lighter rounded-2xl p-6 transition-all hover:-translate-y-2 hover:border-primary cursor-pointer"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              {/* School Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold ${
-                    colorClasses[school.color as keyof typeof colorClasses]
-                  }`}
-                >
-                  {school.abbreviation.slice(0, 2)}
-                </div>
-                <div className="text-sm font-bold text-text-gray uppercase">
-                  {school.abbreviation}
-                </div>
-              </div>
-
-              {/* School Info */}
-              <h3 className="text-lg font-bold mb-2 line-clamp-2">
-                {school.name}
-              </h3>
-              <p className="text-sm text-text-gray mb-4 line-clamp-2">
-                {school.description}
-              </p>
-
-              {/* Browse Button */}
-              <Link
-                href={`${ROUTES.PAST_PAPERS}?school=${school.id}`}
-                className="w-full flex items-center justify-between px-4 py-3 bg-transparent border border-dark-lighter rounded-lg text-sm font-medium transition-all hover:bg-primary hover:text-dark hover:border-primary"
+        {isLoading ? (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div 
+                key={i}
+                className="bg-dark border border-dark-lighter rounded-2xl p-6 h-[200px] animate-pulse"
               >
-                <span>Browse Papers</span>
-                <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-semibold">
-                  PDF
-                </span>
-              </Link>
-            </div>
-          ))}
-        </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-dark-lighter" />
+                  <div className="h-4 w-12 bg-dark-lighter rounded" />
+                </div>
+                <div className="h-6 w-3/4 bg-dark-lighter rounded mb-2" />
+                <div className="h-4 w-full bg-dark-lighter rounded mb-4" />
+                <div className="h-10 w-full bg-dark-lighter rounded" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {schools.map((school, index) => (
+              <div
+                key={school.id}
+                className="bg-dark border border-dark-lighter rounded-2xl p-6 transition-all hover:-translate-y-2 hover:border-primary cursor-pointer"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                {/* School Header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold ${
+                      colorClasses[school.color as keyof typeof colorClasses]
+                    }`}
+                  >
+                    {school.abbreviation.slice(0, 2)}
+                  </div>
+                  <div className="text-sm font-bold text-text-gray uppercase">
+                    {school.abbreviation}
+                  </div>
+                </div>
 
-        {/* View All Link */}
-        <div className="text-center mt-12">
-          <Link
-            href={ROUTES.PAST_PAPERS}
-            className="inline-flex items-center gap-2 text-primary hover:text-primary-dark font-semibold transition-colors"
-          >
-            View All Schools & Departments
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 8l4 4m0 0l-4 4m4-4H3"
-              />
-            </svg>
-          </Link>
-        </div>
+                {/* School Info */}
+                <h3 className="text-lg font-bold mb-2 line-clamp-2">
+                  {school.name}
+                </h3>
+                <p className="text-sm text-text-gray mb-4 line-clamp-2">
+                  {school.description}
+                </p>
+
+                {/* Browse Button */}
+                <Link
+                  href={`${ROUTES.PAST_PAPERS}?school=${school.id}`}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-transparent border border-dark-lighter rounded-lg text-sm font-medium transition-all hover:bg-primary hover:text-dark hover:border-primary"
+                >
+                  <span>Browse Papers</span>
+                  <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-semibold">
+                    PDF
+                  </span>
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )
