@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ChevronDown, User, LogOut } from 'lucide-react'
+import { ChevronDown, User, LogOut, Award } from 'lucide-react'
 import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 
 export default function ProfileDropdown() {
@@ -60,6 +60,10 @@ export default function ProfileDropdown() {
           <Link href="/profile" className={itemClasses} onClick={() => setIsOpen(false)}>
             <User className="w-4 h-4 mr-3" />
             <span>Profile</span>
+          </Link>
+          <Link href="/marking-schemes" className={itemClasses} onClick={() => setIsOpen(false)}>
+            <Award className="w-4 h-4 mr-3" />
+            <span>My Marking Schemes</span>
           </Link>
           <button
             onClick={() => {
