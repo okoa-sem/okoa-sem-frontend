@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google'
 
 import { AuthProvider } from '@/app/providers/authentication-provider/AuthenticationProvider';
 import { QueryProvider } from '@/app/providers/query-provider/QueryProvider';
+import StoreProvider from '@/app/providers/store-provider/StoreProvider';
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -22,11 +23,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <body className={inter.className}>
-        <QueryProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </QueryProvider>
+        <StoreProvider>
+          <QueryProvider>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </QueryProvider>
+        </StoreProvider>
       </body>
     </html>
   )
