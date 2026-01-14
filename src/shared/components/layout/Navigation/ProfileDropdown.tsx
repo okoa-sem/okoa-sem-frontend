@@ -46,9 +46,18 @@ export default function ProfileDropdown() {
         onClick={() => setIsOpen(!isOpen)}
         className={buttonClasses}
       >
-        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-dark font-semibold">
-          {user.displayName?.[0].toUpperCase()}
-        </div>
+        {user.photoUrl ? (
+         
+          <img 
+            src={user.photoUrl} 
+            alt={user.displayName} 
+            className="w-8 h-8 rounded-full object-cover border border-primary" 
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-dark font-semibold">
+            {user.displayName?.[0].toUpperCase()}
+          </div>
+        )}
         <span className={`hidden md:block text-sm font-medium ${isLight ? 'text-gray-800' : 'text-white'}`}>
           {user.displayName}
         </span>

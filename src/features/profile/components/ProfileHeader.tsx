@@ -1,36 +1,99 @@
 'use client'
 
-import { CheckCircle, Calendar, Clock } from 'lucide-react'
+import { useRef } from 'react'
+import { CheckCircle, Calendar, Clock, Camera, Trash2, Loader2 } from 'lucide-react'
 import { UserProfile } from '@/types'
+import { useProfileImage } from '../hooks/useProfileImage'
 
 interface ProfileHeaderProps {
-  user: UserProfile
+  user: UserProfile & { photoUrl?: string | null } 
 }
 
 export default function ProfileHeader({ user }: ProfileHeaderProps) {
-  const formattedMemberDate = new Date(user.memberSince).toLocaleDateString('en-US', {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { 
+    uploadProfileImage, 
+    isUploading, 
+    removeProfileImage, 
+    isRemoving, 
+  } = useProfileImage()
+
+  const formattedMemberDate = new Date(user.memberSince || user.createdAt).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   })
 
+  const profileImage = user.photoUrl || user.avatar
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      uploadProfileImage(file)
+    }
+  }
+
   return (
     <div className="bg-dark-card border border-dark-lighter rounded-2xl p-6 h-fit sticky top-8">
       {/* Profile Image */}
       <div className="flex flex-col items-center text-center mb-6">
-        <div className="relative mb-4">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-4xl font-bold text-dark">
-            {user.name.charAt(0).toUpperCase()}
+        <div className="relative mb-4 group">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-4xl font-bold text-dark overflow-hidden relative">
+            {profileImage ? (
+            
+              <img src={profileImage} alt={user.name} className="w-full h-full object-cover" />
+            ) : (
+              user.name.charAt(0).toUpperCase()
+            )}
+            
+            {/* Loading Overlay */}
+            {(isUploading || isRemoving) && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 text-white animate-spin" />
+              </div>
+            )}
           </div>
+          
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            className="hidden" 
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleImageUpload}
+          />
+
           {user.isVerified && (
-            <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-dark-card border-2 border-primary rounded-full flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-primary" />
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-dark-card border-2 border-primary rounded-full flex items-center justify-center z-10 pointer-events-none">
+              <CheckCircle className="w-3 h-3 text-primary" />
             </div>
           )}
         </div>
 
         <h2 className="text-xl font-bold text-white mb-1">{user.name}</h2>
-        <p className="text-text-gray text-sm mb-3">{user.email}</p>
+        <p className="text-text-gray text-sm mb-4">{user.email}</p>
+
+        {/* Profile Actions */}
+        <div className="flex items-center gap-2 mb-4">
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading || isRemoving}
+            className="flex items-center gap-2 px-3 py-1.5 bg-dark-lighter hover:bg-dark-card border border-dark-lighter hover:border-primary/50 rounded-lg transition-all text-xs font-medium text-text-gray hover:text-white"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            {profileImage ? 'Edit Photo' : 'Upload Photo'}
+          </button>
+
+          {profileImage && (
+            <button 
+              onClick={() => removeProfileImage()}
+              disabled={isUploading || isRemoving}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-transparent hover:border-red-500/30 rounded-lg transition-all text-xs font-medium text-red-500"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Remove
+            </button>
+          )}
+        </div>
 
         {user.isVerified && (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full">
@@ -42,6 +105,7 @@ export default function ProfileHeader({ user }: ProfileHeaderProps) {
 
       {/* Divider */}
       <div className="border-t border-dark-lighter my-5"></div>
+
 
       {/* Stats */}
       <div className="space-y-4">

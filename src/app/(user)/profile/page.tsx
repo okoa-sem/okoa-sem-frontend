@@ -8,20 +8,7 @@ import ProfileHeader from '@/features/profile/components/ProfileHeader'
 import AccountDetails from '@/features/profile/components/AccountDetails'
 import SubscriptionCard from '@/features/profile/components/SubscriptionCard'
 import PaymentPlans from '@/features/profile/components/PaymentPlans'
-
-
-const mockUser: UserProfile = {
-  id: '1',
-  email: 'cherotichm182@gmail.com',
-  name: 'Mercy Cherotich',
-  avatar: undefined,
-  subscriptionStatus: 'free',
-  createdAt: new Date('2025-09-12'),
-  lastActive: new Date(),
-  isVerified: true,
-  memberSince: new Date('2025-09-12'),
-  lastActiveTime: '4 minutes ago',
-}
+import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 
 const mockSubscription: UserSubscription = {
   isActive: false,
@@ -46,19 +33,29 @@ const subscriptionPlans: SubscriptionPlan[] = [
 ]
 
 export default function MyAccountPage() {
+  const { user: authUser } = useAuth()
   const [user, setUser] = useState<UserProfile | null>(null)
   const [subscription, setSubscription] = useState<UserSubscription | null>(null)
 
   useEffect(() => {
-    
-    // Simulate loading delay
-    const timer = setTimeout(() => {
-      setUser(mockUser)
+    if (authUser) {
+      setUser({
+        id: String(authUser.id), 
+        email: authUser.email,
+        name: authUser.displayName,
+        avatar: authUser.photoUrl || undefined,
+        photoUrl: authUser.photoUrl || undefined,
+        subscriptionStatus: 'free',
+        createdAt: new Date(),
+        lastActive: new Date(),
+        isVerified: authUser.emailVerified,
+        memberSince: new Date(),
+        lastActiveTime: 'Just now',
+        school: authUser.institution,
+      } as UserProfile)
       setSubscription(mockSubscription)
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [])
+    }
+  }, [authUser])
 
   const handleSelectPlan = (plan: SubscriptionPlan) => {
   
