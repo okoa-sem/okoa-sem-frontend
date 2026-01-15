@@ -30,10 +30,15 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
     }
   }
 
+  const preventContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+  }
+
   return (
     <div 
       className={`preview-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-4'}`}
       onClick={handleBackdropClick}
+      onContextMenu={preventContextMenu}
     >
       <div 
         className={`preview-modal relative bg-dark-card flex flex-col overflow-hidden border border-dark-lighter shadow-2xl transition-all duration-300 ${
@@ -95,20 +100,33 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
         </div>
 
         {/* PDF Preview Area */}
-        <div className="flex-1 bg-dark overflow-hidden relative group">
+        <div 
+          className="flex-1 bg-dark relative group overflow-y-auto"
+          onContextMenu={preventContextMenu}
+        >
           {paper.previewUrl || paper.fileUrl ? (
-            <>
+            <div className="relative w-full h-[350vh]">
               {isLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-dark z-10">
+                <div className="absolute inset-0 w-full h-full bg-dark z-20 flex items-start justify-center pt-[40vh]">
                   <div className="flex flex-col items-center gap-3">
                     <Loader2 className="w-10 h-10 text-primary animate-spin" />
                     <p className="text-text-gray animate-pulse">Loading preview...</p>
                   </div>
                 </div>
               )}
+              
+              {/* Transparent Overlay to block interaction */}
+              <div 
+                className="absolute inset-0 z-10" 
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+              />
+
               <iframe 
                 src={`${paper.previewUrl || paper.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                className="w-full h-full border-none"
+                className="w-full h-full border-none print:hidden"
                 title={`${paper.courseCode} - ${paper.courseName}`}
                 onLoad={() => setIsLoading(false)}
               />
@@ -116,7 +134,7 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
                   {/* Hidden fallback */}
               </div>
-            </>
+            </div>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center text-text-gray gap-4">
               <FileText className="w-16 h-16 opacity-20" />

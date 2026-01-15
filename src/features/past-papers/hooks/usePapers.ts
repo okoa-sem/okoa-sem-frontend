@@ -7,6 +7,7 @@ interface UsePapersOptions {
   size?: number;
   sortBy?: string;
   sortDirection?: 'ASC' | 'DESC';
+  schoolCode?: string;
 }
 
 export const usePaperById = (id: number) => {
@@ -20,15 +21,38 @@ export const usePaperById = (id: number) => {
 export const usePapersByYear = (year: number, options: UsePapersOptions = {}) => {
   return useQuery({
     queryKey: ['papers', 'year', year, options],
-    queryFn: () => papersService.getPapersByYear(year, options),
+    queryFn: () => {
+      if (options.schoolCode) {
+        return papersService.searchPapers({
+          year,
+          schoolCode: options.schoolCode,
+          page: options.page,
+          size: options.size,
+          sortBy: options.sortBy,
+          sortDirection: options.sortDirection,
+        });
+      }
+      return papersService.getPapersByYear(year, options);
+    },
     enabled: !!year,
   });
 };
 
-export const useLatestPapers = (options: { page?: number; size?: number } = {}) => {
+export const useLatestPapers = (options: { page?: number; size?: number; schoolCode?: string } = {}) => {
   return useQuery({
     queryKey: ['papers', 'latest', options],
-    queryFn: () => papersService.getLatestPapers(options),
+    queryFn: () => {
+      if (options.schoolCode) {
+        return papersService.searchPapers({
+          schoolCode: options.schoolCode,
+          page: options.page,
+          size: options.size,
+          sortBy: 'uploadedAt',
+          sortDirection: 'DESC',
+        });
+      }
+      return papersService.getLatestPapers(options);
+    },
   });
 };
 

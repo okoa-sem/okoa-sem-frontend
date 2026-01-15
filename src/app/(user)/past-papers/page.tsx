@@ -31,36 +31,6 @@ function PastPapersContent() {
   const { data: schoolNames, isLoading: isLoadingNames } = useSchoolNames()
   const { data: allYears } = useAllYears()
 
-  const [selectedYear, setSelectedYear] = useState<number | null>(null)
-  
-  const [currentPage, setCurrentPage] = useState(0);
-  const pageSize = 20;
-
-  const { data: latestPapers, isLoading: isLatestLoading } = useLatestPapers({ page: currentPage, size: pageSize });
-  const { data: papersByYear, refetch: refetchPapers, isLoading: isYearLoading } = usePapersByYear(selectedYear!, {
-    page: currentPage,
-    size: pageSize,
-    sortBy: 'uploadedAt',
-    sortDirection: 'DESC'
-  });
-
-  // Map API papers to UI format
-  const mapApiPaperToUi = (apiPaper: ExamPaper): PastPaper => ({
-    id: apiPaper.id.toString(),
-    title: apiPaper.filename.replace('.pdf', '').replace(/-/g, ' '),
-    courseCode: apiPaper.filename.split('-')[0] || 'UNK',
-    courseName: apiPaper.filename.split('-').slice(1, -1).join(' ') || apiPaper.filename,
-    school: apiPaper.schoolName,
-    year: apiPaper.year,
-    semester: 'unknown',
-    examType: 'main', 
-    fileUrl: apiPaper.s3Url,
-    fileSize: apiPaper.fileSize,
-    uploadedAt: new Date(apiPaper.uploadedAt),
-    downloads: 0, 
-    previewUrl: apiPaper.s3Url // Use s3Url for preview as well
-  });
-
   // Dynamic school list based on API data
   const dynamicSchools = useMemo(() => {
     if (!schoolCodes || !schoolNames) return [];
@@ -80,7 +50,43 @@ function PastPapersContent() {
   const schoolFromUrl = searchParams.get('school')
   
   const resolvedSchoolId = selectedSchoolId || schoolFromUrl || dynamicSchools[0]?.id || ''
+
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
   
+  const [currentPage, setCurrentPage] = useState(0);
+  const pageSize = 20;
+
+  const { data: latestPapers, isLoading: isLatestLoading } = useLatestPapers({ 
+    page: currentPage, 
+    size: pageSize,
+    schoolCode: resolvedSchoolId
+  });
+  const { data: papersByYear, refetch: refetchPapers, isLoading: isYearLoading } = usePapersByYear(selectedYear!, {
+    page: currentPage,
+    size: pageSize,
+    sortBy: 'uploadedAt',
+    sortDirection: 'DESC',
+    schoolCode: resolvedSchoolId
+  });
+
+  // Map API papers to UI format
+  const mapApiPaperToUi = (apiPaper: ExamPaper): PastPaper => ({
+    id: apiPaper.id.toString(),
+    title: apiPaper.filename.replace('.pdf', '').replace(/-/g, ' '),
+    courseCode: apiPaper.filename.split('-')[0] || 'UNK',
+    courseName: apiPaper.filename.split('-').slice(1, -1).join(' ') || apiPaper.filename,
+    school: apiPaper.schoolName,
+    year: apiPaper.year,
+    semester: 'unknown',
+    examType: 'main', 
+    fileUrl: apiPaper.s3Url,
+    fileSize: apiPaper.fileSize,
+    uploadedAt: new Date(apiPaper.uploadedAt),
+    downloads: 0, 
+    previewUrl: apiPaper.s3Url // Use s3Url for preview as well
+  });
+
+
   const { data: schoolYears } = useYearsBySchool(resolvedSchoolId)
   const { data: totalSchoolPapers } = usePaperCountBySchool(resolvedSchoolId)
   const { data: totalYearPapers } = usePaperCountByYear(selectedYear)
@@ -97,7 +103,7 @@ function PastPapersContent() {
 
   const { data: searchResults, isLoading: isSearchLoading } = useSearchPapers({
     filename: debouncedSearchQuery,
-    schoolCode: selectedSchoolId || undefined, // Optional: restrict search to selected school
+    schoolCode: resolvedSchoolId || undefined, // Optional: restrict search to selected school
     page: currentPage,
     size: pageSize,
     sortBy: 'uploadedAt',
