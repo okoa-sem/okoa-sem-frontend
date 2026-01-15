@@ -36,3 +36,16 @@ export interface ApiSingleResponse<T> {
   message: string;
   data: T;
 }
+
+export interface SearchPapersParams {
+  filename?: string;
+  schoolCode?: string;
+  schoolName?: string;
+  year?: number;
+  fromYear?: number;
+  toYear?: number;
+  page?: number;
+  size?: number;
+  sortBy?: string;
+  sortDirection?: 'ASC' | 'DESC';
+}

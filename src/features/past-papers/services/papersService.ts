@@ -1,5 +1,5 @@
 import { httpClient } from '@/core/http/client';
-import { SchoolsResponse, ExamPaper, ApiSingleResponse, PaginatedData } from '../types';
+import { SchoolsResponse, ExamPaper, ApiSingleResponse, PaginatedData, SearchPapersParams } from '../types';
 
 const BASE_URL = '/exam-papers';
 
@@ -39,6 +39,11 @@ export const papersService = {
 
   getYearsBySchool: async (schoolId: string): Promise<number[]> => {
     const response = await httpClient.get<SchoolsResponse<number>>(`${BASE_URL}/schools/${schoolId}/years`);
+    return response.data.data;
+  },
+
+  searchPapers: async (params: SearchPapersParams): Promise<PaginatedData<ExamPaper>> => {
+    const response = await httpClient.get<ApiSingleResponse<PaginatedData<ExamPaper>>>(`${BASE_URL}/search`, { params });
     return response.data.data;
   },
 };

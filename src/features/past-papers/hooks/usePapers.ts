@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { papersService } from '../services/papersService';
-import { ApiSingleResponse, PaginatedData, ExamPaper } from '../types/api';
+import { ApiSingleResponse, PaginatedData, ExamPaper, SearchPapersParams } from '../types/api';
 
 interface UsePapersOptions {
   page?: number;
@@ -29,5 +29,12 @@ export const useLatestPapers = (options: { page?: number; size?: number } = {}) 
   return useQuery({
     queryKey: ['papers', 'latest', options],
     queryFn: () => papersService.getLatestPapers(options),
+  });
+};
+
+export const useSearchPapers = (params: SearchPapersParams) => {
+  return useQuery({
+    queryKey: ['papers', 'search', params],
+    queryFn: () => papersService.searchPapers(params),
   });
 };

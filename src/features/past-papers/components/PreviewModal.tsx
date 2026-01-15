@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Upload, ExternalLink, FileText, Award, Maximize2, Minimize2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Upload, ExternalLink, FileText, Award, Maximize2, Minimize2, Loader2 } from 'lucide-react'
 import { PastPaper } from '@/types'
 
 interface PreviewModalProps {
@@ -14,6 +14,13 @@ interface PreviewModalProps {
 
 export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onGenerateMarkingScheme }: PreviewModalProps) {
   const [isFullScreen, setIsFullScreen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsLoading(true)
+    }
+  }, [isOpen, paper])
 
   if (!isOpen || !paper) return null
 
@@ -91,10 +98,19 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
         <div className="flex-1 bg-dark overflow-hidden relative group">
           {paper.previewUrl || paper.fileUrl ? (
             <>
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-dark z-10">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                    <p className="text-text-gray animate-pulse">Loading preview...</p>
+                  </div>
+                </div>
+              )}
               <iframe 
                 src={`${paper.previewUrl || paper.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                 className="w-full h-full border-none"
                 title={`${paper.courseCode} - ${paper.courseName}`}
+                onLoad={() => setIsLoading(false)}
               />
               {/* Fallback/Download overlay if iframe fails or for better UX */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">

@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { PastPaper, MarkingScheme } from '@/types'
 import { PAST_PAPERS_SCHOOLS } from '@/shared/constants'
 import { useSchoolCodes, useSchoolNames, useAllYears, useYearsBySchool } from '@/features/past-papers/hooks/useSchools'
-import { usePapersByYear, useLatestPapers } from '@/features/past-papers/hooks/usePapers'
+import { usePapersByYear, useLatestPapers, useSearchPapers } from '@/features/past-papers/hooks/usePapers'
 import { ExamPaper } from '@/features/past-papers/types/api'
 import { setSelectedSchoolId } from '@/store/slices/ui.slice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 import CompactHeader from '@/shared/components/CompactHeader'
 import SchoolTabs from '@/features/past-papers/components/SchoolTabs'
 import YearSelector from '@/features/past-papers/components/YearSelector'
@@ -42,10 +43,6 @@ function PastPapersContent() {
     sortBy: 'uploadedAt',
     sortDirection: 'DESC'
   });
-
-  // Calculate pagination stats
-  const paginationData = selectedYear ? papersByYear : latestPapers;
-  const totalPages = paginationData?.totalPages || 0;
 
   // Map API papers to UI format
   const mapApiPaperToUi = (apiPaper: ExamPaper): PastPaper => ({
@@ -89,15 +86,41 @@ function PastPapersContent() {
   // State
  
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [debouncedSearchQuery, selectedYear]);
+
+  const { data: searchResults, isLoading: isSearchLoading } = useSearchPapers({
+    filename: debouncedSearchQuery,
+    schoolCode: selectedSchoolId || undefined, // Optional: restrict search to selected school
+    page: currentPage,
+    size: pageSize,
+    sortBy: 'uploadedAt',
+    sortDirection: 'DESC'
+  }); 
+
   const [examFilter, setExamFilter] = useState<'all' | 'main' | 'supplementary' | 'cat'>('all')
   const [semesterFilter, setSemesterFilter] = useState<'all' | 'first' | 'second'>('all')
-  const [papers, setPapers] = useState<PastPaper[]>([])
   
-  const isLoading = selectedYear ? isYearLoading : isLatestLoading;
-
   const [previewPaper, setPreviewPaper] = useState<PastPaper | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [markingSchemePaper, setMarkingSchemePaper] = useState<PastPaper | null>(null)
+
+  // Determine which dataset to display
+  const activeData = debouncedSearchQuery ? searchResults : (selectedYear ? papersByYear : latestPapers);
+  const isLoading = debouncedSearchQuery ? isSearchLoading : (selectedYear ? isYearLoading : isLatestLoading);
+  
+  const papers = useMemo(() => {
+    if (!activeData?.content) return [];
+    return activeData.content.map(mapApiPaperToUi);
+  }, [activeData]);
+  
+  // Calculate pagination stats
+  const paginationData = activeData;
+  const totalPages = paginationData?.totalPages || 0;
   const [isMarkingSchemeOpen, setIsMarkingSchemeOpen] = useState(false)
   
   useEffect(() => {
@@ -125,44 +148,21 @@ function PastPapersContent() {
   }, [resolvedSchoolId, dynamicSchools, schoolYears])
 
   
-  useEffect(() => {
-    let newPapers: PastPaper[] = [];
-
-    if (selectedYear && papersByYear?.content) {
-      newPapers = papersByYear.content.map(mapApiPaperToUi);
-    } else if (!selectedYear && latestPapers?.content) {
-      newPapers = latestPapers.content.map(mapApiPaperToUi);
-    }
-
-    setPapers(newPapers);
-  }, [selectedYear, papersByYear, latestPapers, schoolFromUrl, selectedSchoolId, currentPage]);
-
   
   const filteredPapers = useMemo(() => {
     let filtered = papers
 
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(paper => 
-        paper.courseCode.toLowerCase().includes(query) ||
-        paper.courseName.toLowerCase().includes(query) ||
-        paper.title.toLowerCase().includes(query)
-      )
-    }
-
-    
+    // Client-side filters for properties not yet supported by API search
     if (examFilter !== 'all') {
       filtered = filtered.filter(paper => paper.examType === examFilter)
     }
 
-    
     if (semesterFilter !== 'all') {
       filtered = filtered.filter(paper => paper.semester === semesterFilter)
     }
 
     return filtered
-  }, [papers, searchQuery, examFilter, semesterFilter])
+  }, [papers, examFilter, semesterFilter])
 
 
   const handlePageChange = useCallback((newPage: number) => {
@@ -338,14 +338,14 @@ function PastPapersContent() {
             onYearChange={handleYearChange}
           />
 
-          {/* Show content only when year is selected */}
-          {filteredPapers.length > 0 || isLoading ? (
+          {/* Show content only when year is selected or searching */}
+          {filteredPapers.length > 0 || isLoading || debouncedSearchQuery ? (
             <>
               {/* Search Bar */}
               <SearchBar
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
-                resultsCount={filteredPapers.length}
+                resultsCount={paginationData?.totalElements}
               />
 
               
