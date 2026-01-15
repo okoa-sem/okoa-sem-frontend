@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, Suspense, useRef } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PastPaper, MarkingScheme } from '@/types'
 import { PAST_PAPERS_SCHOOLS } from '@/shared/constants'
-import { useSchoolCodes, useSchoolNames, useAllYears, useYearsBySchool } from '@/features/past-papers/hooks/useSchools'
+import { useSchoolCodes, useSchoolNames, useAllYears, useYearsBySchool, usePaperCountBySchool, usePaperCountByYear } from '@/features/past-papers/hooks/useSchools'
 import { usePapersByYear, useLatestPapers, useSearchPapers } from '@/features/past-papers/hooks/usePapers'
 import { ExamPaper } from '@/features/past-papers/types/api'
 import { setSelectedSchoolId } from '@/store/slices/ui.slice';
@@ -82,6 +82,8 @@ function PastPapersContent() {
   const resolvedSchoolId = selectedSchoolId || schoolFromUrl || dynamicSchools[0]?.id || ''
   
   const { data: schoolYears } = useYearsBySchool(resolvedSchoolId)
+  const { data: totalSchoolPapers } = usePaperCountBySchool(resolvedSchoolId)
+  const { data: totalYearPapers } = usePaperCountByYear(selectedYear)
 
   // State
  
@@ -318,9 +320,15 @@ function PastPapersContent() {
                 </h2>
                 <p className="text-text-gray text-sm">
                   {currentSchool.abbreviation} • {currentSchool.years.length} years of past papers available
+                  {typeof totalSchoolPapers === 'number' && ` • ${totalSchoolPapers} papers`}
                 </p>
               </div>
               <div className="text-sm text-text-gray">
+                {selectedYear && typeof totalYearPapers === 'number' && (
+                  <span className="mr-4 bg-primary/10 text-primary px-2 py-1 rounded">
+                    {selectedYear}: {totalYearPapers} papers
+                  </span>
+                )}
                 {currentSchool.years.length > 0 && (
                   <>
                   Years: <span className="text-primary">{currentSchool.years[currentSchool.years.length - 1]}</span> - <span className="text-primary">{currentSchool.years[0]}</span>

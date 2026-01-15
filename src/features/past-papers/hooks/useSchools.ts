@@ -29,3 +29,19 @@ export const useYearsBySchool = (schoolId: string | undefined) => {
     enabled: !!schoolId,
   });
 };
+
+export const usePaperCountBySchool = (schoolId: string | undefined) => {
+  return useQuery({
+    queryKey: ['paperCountBySchool', schoolId],
+    queryFn: () => papersService.getPaperCountBySchool(schoolId!),
+    enabled: !!schoolId,
+  });
+};
+
+export const usePaperCountByYear = (year: number | undefined | null) => {
+  return useQuery({
+    queryKey: ['paperCountByYear', year],
+    queryFn: () => papersService.getPaperCountByYear(year!),
+    enabled: !!year,
+  });
+};

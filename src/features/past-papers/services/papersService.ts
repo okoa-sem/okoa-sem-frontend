@@ -42,6 +42,16 @@ export const papersService = {
     return response.data.data;
   },
 
+  getPaperCountBySchool: async (schoolId: string): Promise<number> => {
+    const response = await httpClient.get<ApiSingleResponse<number>>(`${BASE_URL}/schools/${schoolId}/count`);
+    return response.data.data;
+  },
+
+  getPaperCountByYear: async (year: number): Promise<number> => {
+    const response = await httpClient.get<ApiSingleResponse<number>>(`${BASE_URL}/years/${year}/count`);
+    return response.data.data;
+  },
+
   searchPapers: async (params: SearchPapersParams): Promise<PaginatedData<ExamPaper>> => {
     const response = await httpClient.get<ApiSingleResponse<PaginatedData<ExamPaper>>>(`${BASE_URL}/search`, { params });
     return response.data.data;
