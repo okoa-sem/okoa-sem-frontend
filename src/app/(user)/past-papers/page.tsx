@@ -1,9 +1,15 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from 'react'
+import { useState, useEffect, useMemo, useCallback, Suspense, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PastPaper, MarkingScheme } from '@/types'
-import { PAST_PAPERS_SCHOOLS, generateDemoPastPapers } from '@/shared/constants'
+import { PAST_PAPERS_SCHOOLS } from '@/shared/constants'
+import { useSchoolCodes, useSchoolNames, useAllYears, useYearsBySchool, usePaperCountBySchool, usePaperCountByYear } from '@/features/past-papers/hooks/useSchools'
+import { usePapersByYear, useLatestPapers, useSearchPapers } from '@/features/past-papers/hooks/usePapers'
+import { ExamPaper } from '@/features/past-papers/types/api'
+import { setSelectedSchoolId } from '@/store/slices/ui.slice';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 import CompactHeader from '@/shared/components/CompactHeader'
 import SchoolTabs from '@/features/past-papers/components/SchoolTabs'
 import YearSelector from '@/features/past-papers/components/YearSelector'
@@ -13,106 +19,179 @@ import PreviewModal from '@/features/past-papers/components/PreviewModal'
 import GenerateMarkingSchemeModal from '@/features/past-papers/components/GenerateMarkingSchemeModal'
 import EmptyState from '@/features/past-papers/components/EmptyState'
 import LoadingState from '@/features/past-papers/components/LoadingState'
+import Pagination from '@/shared/components/Pagination'
 
 function PastPapersContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  
-  // Get school from URL params, default to first school
+  const dispatch = useAppDispatch();
+  const selectedSchoolId = useAppSelector((state) => state.ui.selectedSchoolId);
+
+  const { data: schoolCodes, isLoading: isLoadingCodes } = useSchoolCodes()
+  const { data: schoolNames, isLoading: isLoadingNames } = useSchoolNames()
+  const { data: allYears } = useAllYears()
+
+  // Dynamic school list based on API data
+  const dynamicSchools = useMemo(() => {
+    if (!schoolCodes || !schoolNames) return [];
+
+    return schoolCodes.map((code, index) => {
+     
+      const existing = PAST_PAPERS_SCHOOLS.find(s => s.id === code);
+      return {
+        id: code,
+        name: schoolNames[index] || code,
+        abbreviation: existing?.abbreviation || code.split('_')[0] || 'N/A', 
+        years: allYears || [], 
+      };
+    });
+  }, [schoolCodes, schoolNames, allYears]);
+
   const schoolFromUrl = searchParams.get('school')
-  const initialSchool = PAST_PAPERS_SCHOOLS.find(s => s.id === schoolFromUrl)?.id || PAST_PAPERS_SCHOOLS[0].id
   
-  // State
-  const [activeSchool, setActiveSchool] = useState<string>(initialSchool)
+  const resolvedSchoolId = selectedSchoolId || schoolFromUrl || dynamicSchools[0]?.id || ''
+
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
+  
+  const [currentPage, setCurrentPage] = useState(0);
+  const pageSize = 20;
+
+  const { data: latestPapers, isLoading: isLatestLoading } = useLatestPapers({ 
+    page: currentPage, 
+    size: pageSize,
+    schoolCode: resolvedSchoolId
+  });
+  const { data: papersByYear, refetch: refetchPapers, isLoading: isYearLoading } = usePapersByYear(selectedYear!, {
+    page: currentPage,
+    size: pageSize,
+    sortBy: 'uploadedAt',
+    sortDirection: 'DESC',
+    schoolCode: resolvedSchoolId
+  });
+
+  // Map API papers to UI format
+  const mapApiPaperToUi = (apiPaper: ExamPaper): PastPaper => ({
+    id: apiPaper.id.toString(),
+    title: apiPaper.filename.replace('.pdf', '').replace(/-/g, ' '),
+    courseCode: apiPaper.filename.split('-')[0] || 'UNK',
+    courseName: apiPaper.filename.split('-').slice(1, -1).join(' ') || apiPaper.filename,
+    school: apiPaper.schoolName,
+    year: apiPaper.year,
+    semester: 'unknown',
+    examType: 'main', 
+    fileUrl: apiPaper.s3Url,
+    fileSize: apiPaper.fileSize,
+    uploadedAt: new Date(apiPaper.uploadedAt),
+    downloads: 0, 
+    previewUrl: apiPaper.s3Url // Use s3Url for preview as well
+  });
+
+
+  const { data: schoolYears } = useYearsBySchool(resolvedSchoolId)
+  const { data: totalSchoolPapers } = usePaperCountBySchool(resolvedSchoolId)
+  const { data: totalYearPapers } = usePaperCountByYear(selectedYear)
+
+  // State
+ 
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [debouncedSearchQuery, selectedYear]);
+
+  const { data: searchResults, isLoading: isSearchLoading } = useSearchPapers({
+    filename: debouncedSearchQuery,
+    schoolCode: resolvedSchoolId || undefined, // Optional: restrict search to selected school
+    page: currentPage,
+    size: pageSize,
+    sortBy: 'uploadedAt',
+    sortDirection: 'DESC'
+  }); 
+
   const [examFilter, setExamFilter] = useState<'all' | 'main' | 'supplementary' | 'cat'>('all')
   const [semesterFilter, setSemesterFilter] = useState<'all' | 'first' | 'second'>('all')
-  const [papers, setPapers] = useState<PastPaper[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  
   const [previewPaper, setPreviewPaper] = useState<PastPaper | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [markingSchemePaper, setMarkingSchemePaper] = useState<PastPaper | null>(null)
-  const [isMarkingSchemeOpen, setIsMarkingSchemeOpen] = useState(false)
 
+  // Determine which dataset to display
+  const activeData = debouncedSearchQuery ? searchResults : (selectedYear ? papersByYear : latestPapers);
+  const isLoading = debouncedSearchQuery ? isSearchLoading : (selectedYear ? isYearLoading : isLatestLoading);
+  
+  const papers = useMemo(() => {
+    if (!activeData?.content) return [];
+    return activeData.content.map(mapApiPaperToUi);
+  }, [activeData]);
+  
+  // Calculate pagination stats
+  const paginationData = activeData;
+  const totalPages = paginationData?.totalPages || 0;
+  const [isMarkingSchemeOpen, setIsMarkingSchemeOpen] = useState(false)
   
   useEffect(() => {
     if (schoolFromUrl) {
-      const school = PAST_PAPERS_SCHOOLS.find(s => s.id === schoolFromUrl)
+      const school = dynamicSchools.find(s => s.id === schoolFromUrl)
       if (school) {
-        setActiveSchool(school.id)
+        dispatch(setSelectedSchoolId(school.id))
       }
     }
-  }, [schoolFromUrl])
+  }, [schoolFromUrl, dynamicSchools, dispatch])
+
+  useEffect(() => {
+    if (resolvedSchoolId && resolvedSchoolId !== selectedSchoolId) {
+       dispatch(setSelectedSchoolId(resolvedSchoolId));
+    }
+  }, [resolvedSchoolId, selectedSchoolId, dispatch])
 
   // Get current school data
   const currentSchool = useMemo(() => {
-    return PAST_PAPERS_SCHOOLS.find(s => s.id === activeSchool) || PAST_PAPERS_SCHOOLS[0]
-  }, [activeSchool])
-
-  
-  useEffect(() => {
-    if (!selectedYear) {
-      setPapers([])
-      return
+    const school = dynamicSchools.find(s => s.id === resolvedSchoolId) || dynamicSchools[0]
+    if (school && schoolYears) {
+      return { ...school, years: schoolYears }
     }
+    return school
+  }, [resolvedSchoolId, dynamicSchools, schoolYears])
 
-    setIsLoading(true)
-    
   
-    const timer = setTimeout(() => {
-      const demoPapers = generateDemoPastPapers(
-        currentSchool.name,
-        currentSchool.abbreviation,
-        selectedYear
-      )
-      setPapers(demoPapers)
-      setIsLoading(false)
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [activeSchool, selectedYear, currentSchool])
-
   
   const filteredPapers = useMemo(() => {
     let filtered = papers
 
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(paper => 
-        paper.courseCode.toLowerCase().includes(query) ||
-        paper.courseName.toLowerCase().includes(query) ||
-        paper.title.toLowerCase().includes(query)
-      )
-    }
-
-    
+    // Client-side filters for properties not yet supported by API search
     if (examFilter !== 'all') {
       filtered = filtered.filter(paper => paper.examType === examFilter)
     }
 
-    
     if (semesterFilter !== 'all') {
       filtered = filtered.filter(paper => paper.semester === semesterFilter)
     }
 
     return filtered
-  }, [papers, searchQuery, examFilter, semesterFilter])
+  }, [papers, examFilter, semesterFilter])
 
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const handleSchoolChange = useCallback((schoolId: string) => {
-    setActiveSchool(schoolId)
+    dispatch(setSelectedSchoolId(schoolId));
     setSelectedYear(null)
+    setCurrentPage(0) // Reset page on school change
     setSearchQuery('')
     setExamFilter('all')
     setSemesterFilter('all')
     
     router.push(`/past-papers?school=${schoolId}`, { scroll: false })
-  }, [router])
+  }, [router, dispatch])
 
-  const handleYearChange = useCallback((year: number) => {
+  const handleYearChange = useCallback((year: number | null) => {
     setSelectedYear(year)
+    setCurrentPage(0) // Reset page on year change
     setSearchQuery('')
     setExamFilter('all')
     setSemesterFilter('all')
@@ -139,7 +218,7 @@ function PastPapersContent() {
   }, [])
 
   const handleGenerateMarkingSchemeSubmit = useCallback(async (paper: PastPaper, markingScheme: MarkingScheme) => {
-    // Save to localStorage (in production, this would be an API call)
+    // Save to localStorage 
     const existing = localStorage.getItem('marking-schemes')
     const schemes = existing ? JSON.parse(existing) : []
     schemes.push(markingScheme)
@@ -152,6 +231,65 @@ function PastPapersContent() {
     
     router.push(`/chatbot?paper=${encodeURIComponent(paper.id)}`)
   }, [router])
+
+  // Show loading state while fetching schools
+  if (isLoadingCodes || isLoadingNames) {
+    return (
+      <div className="min-h-screen bg-dark flex flex-col">
+        <CompactHeader />
+        <main className="flex-1">
+          <div className="max-w-[1400px] mx-auto px-4 md:px-[5%] py-8">
+            {/* Page Title */}
+            <div className="text-center mb-8">
+              <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
+                Browse <span className="text-primary">Past Papers</span>
+              </h1>
+              <p className="text-text-gray text-lg max-w-2xl mx-auto">
+                Access over 25,000 past examination papers. Search, preview, download, 
+                or upload to AI for instant help.
+              </p>
+            </div>
+
+            {/* Skeleton Loading UI */}
+            <div className="space-y-6">
+              {/* School Tabs Skeleton */}
+              <div className="flex overflow-hidden gap-3 pb-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-10 w-32 bg-dark-card border border-dark-lighter rounded-lg flex-shrink-0 animate-pulse" />
+                ))}
+              </div>
+
+              {/* Info Card Skeleton */}
+              <div className="h-24 bg-dark-card border border-dark-lighter rounded-xl animate-pulse" />
+
+              {/* Year Selector Skeleton */}
+              <div className="flex gap-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-8 w-20 bg-dark-card border border-dark-lighter rounded-full animate-pulse" />
+                ))}
+              </div>
+
+              {/* Search Bar Skeleton */}
+              <div className="h-12 bg-dark-card border border-dark-lighter rounded-xl animate-pulse" />
+
+              <LoadingState />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!currentSchool) {
+    return (
+      <div className="min-h-screen bg-dark flex flex-col">
+        <CompactHeader />
+        <main className="flex-1 flex items-center justify-center text-white">
+          <p>No schools found. Please try again later.</p>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dark flex flex-col">
@@ -173,9 +311,9 @@ function PastPapersContent() {
           </div>
 
           {/* School Tabs */}
-          <SchoolTabs
-            schools={PAST_PAPERS_SCHOOLS as unknown as Array<{id: string; name: string; abbreviation: string; years: number[]}>}
-            activeSchool={activeSchool}
+          <SchoolTabs 
+            schools={dynamicSchools as any}
+            activeSchool={resolvedSchoolId}
             onSchoolChange={handleSchoolChange}
           />
 
@@ -188,10 +326,20 @@ function PastPapersContent() {
                 </h2>
                 <p className="text-text-gray text-sm">
                   {currentSchool.abbreviation} • {currentSchool.years.length} years of past papers available
+                  {typeof totalSchoolPapers === 'number' && ` • ${totalSchoolPapers} papers`}
                 </p>
               </div>
               <div className="text-sm text-text-gray">
-                Years: <span className="text-primary">{currentSchool.years[currentSchool.years.length - 1]}</span> - <span className="text-primary">{currentSchool.years[0]}</span>
+                {selectedYear && typeof totalYearPapers === 'number' && (
+                  <span className="mr-4 bg-primary/10 text-primary px-2 py-1 rounded">
+                    {selectedYear}: {totalYearPapers} papers
+                  </span>
+                )}
+                {currentSchool.years.length > 0 && (
+                  <>
+                  Years: <span className="text-primary">{currentSchool.years[currentSchool.years.length - 1]}</span> - <span className="text-primary">{currentSchool.years[0]}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -204,14 +352,14 @@ function PastPapersContent() {
             onYearChange={handleYearChange}
           />
 
-          {/* Show content only when year is selected */}
-          {selectedYear ? (
+          {/* Show content only when year is selected or searching */}
+          {filteredPapers.length > 0 || isLoading || debouncedSearchQuery ? (
             <>
               {/* Search Bar */}
               <SearchBar
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
-                resultsCount={filteredPapers.length}
+                resultsCount={paginationData?.totalElements}
               />
 
               
@@ -220,18 +368,28 @@ function PastPapersContent() {
               {isLoading ? (
                 <LoadingState />
               ) : (
-                <PaperList
-                  papers={filteredPapers}
-                  onPreview={handlePreview}
-                  onGenerateMarkingScheme={handleGenerateMarkingScheme}
-                  onUploadToAI={handleUploadToAI}
-                />
+                <>
+                  <PaperList
+                    papers={filteredPapers}
+                    onPreview={handlePreview}
+                    onGenerateMarkingScheme={handleGenerateMarkingScheme}
+                    onUploadToAI={handleUploadToAI}
+                  />
+                  
+                  {/* Pagination */}
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                    isLoading={isLoading}
+                  />
+                </>
               )}
             </>
           ) : (
-            <EmptyState 
-              schoolName={currentSchool.name}
-              hasSelectedYear={false}
+             <EmptyState
+              schoolName={currentSchool?.name}
+              hasSelectedYear={!!selectedYear}
             />
           )}
         </div>

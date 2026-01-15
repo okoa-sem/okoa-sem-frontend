@@ -19,7 +19,9 @@ export const useProfileImage = () => {
         updateUser({
           ...user,
           ...response.data,
-          photoUrl: response.data.photoUrl || undefined
+          authProvider: user.authProvider,
+          institution: response.data.institution || undefined,
+          photoUrl: response.data.photoUrl || null
         });
       }
     },
@@ -33,7 +35,7 @@ export const useProfileImage = () => {
       if (user) {
         updateUser({
           ...user,
-          photoUrl: undefined,
+          photoUrl: null,
         });
       }
     },

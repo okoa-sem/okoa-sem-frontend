@@ -270,12 +270,15 @@ export default function ChatbotPage() {
       className="h-screen flex flex-col overflow-hidden"
       style={getPageStyle()}
     >
-      <CompactHeader />
+      <CompactHeader 
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        isSidebarOpen={sidebarOpen}
+      />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <ChatSidebar
           isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(!sidebarOpen)}
+          onClose={() => setSidebarOpen(false)}
           chatHistory={chatHistory}
           activeChatId={activeChatId}
           onSelectChat={handleSelectChat}

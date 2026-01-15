@@ -36,3 +36,5 @@ export interface PaperListResponse {
     totalPages: number;
   };
 }
+
+export * from './api';

@@ -7,11 +7,11 @@ interface SchoolTab {
   id: string
   name: string
   abbreviation: string
-  years: number[]
+  years?: number[]
 }
 
 interface SchoolTabsProps {
-  schools: SchoolTab[]
+  schools: any[]
   activeSchool: string
   onSchoolChange: (schoolId: string) => void
 }
