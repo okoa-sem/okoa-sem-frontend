@@ -271,9 +271,9 @@ export default function AIAssistantSection() {
 
 					{/* Right Visual - Chatbot Mockup */}
 					<div
+						className="hidden lg:flex"
 						style={{
 							position: 'relative',
-							display: 'flex',
 							justifyContent: 'center',
 						}}
 					>
