@@ -21,7 +21,7 @@ export default function HomePage() {
 
       <FeaturesSection />
 
-      <AIAssistantSection />
+      
 
       <SchoolsSection />
 

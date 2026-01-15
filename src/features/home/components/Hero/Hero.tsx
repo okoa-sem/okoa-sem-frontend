@@ -112,11 +112,6 @@ export default function Hero() {
 
       {/* Main Content Grid */}
       <div className="relative z-10 w-full min-h-screen flex flex-col overflow-hidden">
-        {/* Decorative floating dots */}
-        <div className="absolute top-32 left-12 w-4 h-4 rounded-full bg-primary/30 blur-sm animate-pulse"></div>
-        <div className="absolute top-64 right-16 w-3 h-3 rounded-full bg-primary/40 blur-sm animate-pulse" style={{animationDelay: '0.5s'}}></div>
-        <div className="absolute bottom-40 left-20 w-2 h-2 rounded-full bg-primary/50 blur-sm animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/3 right-12 w-3.5 h-3.5 rounded-full bg-primary/20 blur-sm animate-pulse" style={{animationDelay: '1.5s'}}></div>
         
         {/* Hero Content */}
         <div className="flex-1 flex items-center justify-center pt-24 pb-16">
@@ -149,7 +144,6 @@ export default function Hero() {
                       border: isLight ? '1.5px solid rgba(0, 150, 60, 0.5)' : '1px solid rgba(0, 200, 83, 0.4)',
                     }}
                   >
-                    <Sparkles className="w-4 h-4 animate-pulse text-primary" />
                     <span className="text-sm font-semibold text-primary">Your Ultimate Study Companion</span>
                   </div>
                 </div>
