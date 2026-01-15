@@ -7,7 +7,7 @@ interface YearSelectorProps {
   years: number[]
   selectedYear: number | null
   schoolAbbreviation: string
-  onYearChange: (year: number) => void
+  onYearChange: (year: number | null) => void // Allow null for "Latest"
 }
 
 export default function YearSelector({ years, selectedYear, schoolAbbreviation, onYearChange }: YearSelectorProps) {
@@ -40,7 +40,7 @@ export default function YearSelector({ years, selectedYear, schoolAbbreviation, 
                 <span className="text-text-gray">Past Papers</span>
               </>
             ) : (
-              <>Select Year</>
+              <><span className="text-primary">Latest</span> {schoolAbbreviation} Papers</>
             )}
           </span>
           <ChevronDown className={`w-5 h-5 text-text-gray transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -49,6 +49,19 @@ export default function YearSelector({ years, selectedYear, schoolAbbreviation, 
         {isOpen && (
           <div className="year-dropdown absolute top-full left-0 mt-2 w-full min-w-[200px] bg-dark-card border border-dark-lighter rounded-xl shadow-2xl z-50 overflow-hidden">
             <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+              <button
+                onClick={() => {
+                  onYearChange(null)
+                  setIsOpen(false)
+                }}
+                className={`w-full px-5 py-3 text-left transition-all ${
+                  selectedYear === null
+                    ? 'bg-primary text-dark font-semibold shadow-lg shadow-primary/30'
+                    : 'text-white hover:bg-[#00C853]/20 hover:text-[#00C853] hover:shadow-md hover:shadow-[#00C853]/10'
+                }`}
+              >
+                Latest Uploads
+              </button>
               {years.map((year) => (
                 <button
                   key={year}

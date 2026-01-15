@@ -181,7 +181,7 @@ function PastPapersContent() {
     router.push(`/past-papers?school=${schoolId}`, { scroll: false })
   }, [router, dispatch])
 
-  const handleYearChange = useCallback((year: number) => {
+  const handleYearChange = useCallback((year: number | null) => {
     setSelectedYear(year)
     setCurrentPage(0) // Reset page on year change
     setSearchQuery('')
