@@ -120,9 +120,7 @@ export default function Navigation() {
             {/* Right Side Actions */}
             <div className="flex items-center gap-4">
               {/* Theme toggle */}
-              <div className="hidden sm:inline-flex">
-                <ThemeToggle />
-              </div>
+             
 
               {isAuthenticated ? (
                 <ProfileDropdown />
@@ -213,9 +211,7 @@ export default function Navigation() {
                 className="mt-6 pt-6 flex flex-col gap-3" 
                 style={{ borderTop: isLight ? '1px solid #E5E7EB' : '1px solid rgba(255,255,255,0.1)' }}
               >
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <ThemeToggle />
-                </div>
+                
                 {isAuthenticated ? (
                   <Link
                     href={ROUTES.MY_ACCOUNT}

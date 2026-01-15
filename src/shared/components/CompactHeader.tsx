@@ -29,7 +29,7 @@ export default function CompactHeader({
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 md:gap-3">
-          <ThemeToggle />
+          
           
           <Link
             href={ROUTES.MARKING_SCHEMES}
