@@ -1,6 +1,7 @@
 'use client'
 
-import { X, Upload, ExternalLink, FileText, Award } from 'lucide-react'
+import { useState } from 'react'
+import { X, Upload, ExternalLink, FileText, Award, Maximize2, Minimize2 } from 'lucide-react'
 import { PastPaper } from '@/types'
 
 interface PreviewModalProps {
@@ -12,6 +13,8 @@ interface PreviewModalProps {
 }
 
 export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onGenerateMarkingScheme }: PreviewModalProps) {
+  const [isFullScreen, setIsFullScreen] = useState(false)
+
   if (!isOpen || !paper) return null
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -22,10 +25,16 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
 
   return (
     <div 
-      className="preview-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+      className={`preview-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-4'}`}
       onClick={handleBackdropClick}
     >
-      <div className="preview-modal relative bg-dark-card w-full max-w-5xl h-[85vh] rounded-2xl overflow-hidden border border-dark-lighter shadow-2xl flex flex-col">
+      <div 
+        className={`preview-modal relative bg-dark-card flex flex-col overflow-hidden border border-dark-lighter shadow-2xl transition-all duration-300 ${
+          isFullScreen 
+            ? 'w-full h-full rounded-none' 
+            : 'w-full max-w-6xl h-[90vh] rounded-2xl'
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-dark-lighter flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -59,6 +68,16 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
               <span className="hidden sm:inline">Ask AI</span>
             </button>
             
+            <div className="w-px h-6 bg-dark-lighter mx-1" />
+
+            <button
+              onClick={() => setIsFullScreen(!isFullScreen)}
+              className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
+              title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+            >
+              {isFullScreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+
             <button
               onClick={onClose}
               className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
@@ -69,11 +88,25 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
         </div>
 
         {/* PDF Preview Area */}
-        <div className="flex-1 bg-dark overflow-hidden">
-          {/* PDF Viewer would go here */}
-          <div className="w-full h-full flex items-center justify-center text-text-gray">
-             Preview not available
-          </div>
+        <div className="flex-1 bg-dark overflow-hidden relative group">
+          {paper.previewUrl || paper.fileUrl ? (
+            <>
+              <iframe 
+                src={`${paper.previewUrl || paper.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                className="w-full h-full border-none"
+                title={`${paper.courseCode} - ${paper.courseName}`}
+              />
+              {/* Fallback/Download overlay if iframe fails or for better UX */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
+                  {/* Hidden fallback */}
+              </div>
+            </>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-text-gray gap-4">
+              <FileText className="w-16 h-16 opacity-20" />
+              <p>Preview not available</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

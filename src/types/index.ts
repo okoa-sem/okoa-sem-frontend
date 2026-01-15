@@ -32,6 +32,24 @@ export interface Paper {
   topics?: string[]
 }
 
+export interface PastPaper {
+  id: string
+  title: string
+  courseCode: string
+  courseName: string
+  school: string
+  department?: string
+  year: number
+  semester: 'first' | 'second' | 'unknown'
+  examType: 'main' | 'supplementary' | 'special' | 'cat'
+  fileUrl: string
+  fileSize: number
+  uploadedBy?: string
+  uploadedAt: Date
+  downloads: number
+  previewUrl?: string // Add previewUrl as an optional property since it's used in components
+}
+
 // School Types
 export interface School {
   id: string
@@ -233,30 +251,6 @@ export interface Playlist {
   videos: YouTubeVideo[]
   createdAt: Date
   updatedAt: Date
-}
-
-// Past Papers Types
-export interface PastPaper {
-  id: string
-  title: string
-  courseCode: string
-  courseName: string
-  school: string
-  schoolAbbreviation: string
-  year: number
-  semester: 'first' | 'second'
-  examType: 'main' | 'supplementary' | 'special' | 'cat'
-  fileUrl: string
-  fileSize: string
-  uploadedAt: Date
-  downloads: number
-}
-
-export interface SchoolTab {
-  id: string
-  name: string
-  abbreviation: string
-  years: number[]
 }
 
 // My Account Types

@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from 'react'
+import { useState, useEffect, useMemo, useCallback, Suspense, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PastPaper, MarkingScheme } from '@/types'
-import { PAST_PAPERS_SCHOOLS, generateDemoPastPapers } from '@/shared/constants'
+import { PAST_PAPERS_SCHOOLS } from '@/shared/constants'
 import { useSchoolCodes, useSchoolNames, useAllYears, useYearsBySchool } from '@/features/past-papers/hooks/useSchools'
+import { usePapersByYear, useLatestPapers } from '@/features/past-papers/hooks/usePapers'
+import { ExamPaper } from '@/features/past-papers/types/api'
 import { setSelectedSchoolId } from '@/store/slices/ui.slice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import CompactHeader from '@/shared/components/CompactHeader'
@@ -16,6 +18,7 @@ import PreviewModal from '@/features/past-papers/components/PreviewModal'
 import GenerateMarkingSchemeModal from '@/features/past-papers/components/GenerateMarkingSchemeModal'
 import EmptyState from '@/features/past-papers/components/EmptyState'
 import LoadingState from '@/features/past-papers/components/LoadingState'
+import Pagination from '@/shared/components/Pagination'
 
 function PastPapersContent() {
   const router = useRouter()
@@ -26,8 +29,42 @@ function PastPapersContent() {
   const { data: schoolCodes, isLoading: isLoadingCodes } = useSchoolCodes()
   const { data: schoolNames, isLoading: isLoadingNames } = useSchoolNames()
   const { data: allYears } = useAllYears()
-  
 
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
+  
+  const [currentPage, setCurrentPage] = useState(0);
+  const pageSize = 20;
+
+  const { data: latestPapers, isLoading: isLatestLoading } = useLatestPapers({ page: currentPage, size: pageSize });
+  const { data: papersByYear, refetch: refetchPapers, isLoading: isYearLoading } = usePapersByYear(selectedYear!, {
+    page: currentPage,
+    size: pageSize,
+    sortBy: 'uploadedAt',
+    sortDirection: 'DESC'
+  });
+
+  // Calculate pagination stats
+  const paginationData = selectedYear ? papersByYear : latestPapers;
+  const totalPages = paginationData?.totalPages || 0;
+
+  // Map API papers to UI format
+  const mapApiPaperToUi = (apiPaper: ExamPaper): PastPaper => ({
+    id: apiPaper.id.toString(),
+    title: apiPaper.filename.replace('.pdf', '').replace(/-/g, ' '),
+    courseCode: apiPaper.filename.split('-')[0] || 'UNK',
+    courseName: apiPaper.filename.split('-').slice(1, -1).join(' ') || apiPaper.filename,
+    school: apiPaper.schoolName,
+    year: apiPaper.year,
+    semester: 'unknown',
+    examType: 'main', 
+    fileUrl: apiPaper.s3Url,
+    fileSize: apiPaper.fileSize,
+    uploadedAt: new Date(apiPaper.uploadedAt),
+    downloads: 0, 
+    previewUrl: apiPaper.s3Url // Use s3Url for preview as well
+  });
+
+  // Dynamic school list based on API data
   const dynamicSchools = useMemo(() => {
     if (!schoolCodes || !schoolNames) return [];
 
@@ -37,8 +74,8 @@ function PastPapersContent() {
       return {
         id: code,
         name: schoolNames[index] || code,
-        abbreviation: existing?.abbreviation || code.split('_')[0] || 'N/A',
-        years: allYears || [], // Default to all years from API, specific years loaded on selection
+        abbreviation: existing?.abbreviation || code.split('_')[0] || 'N/A', 
+        years: allYears || [], 
       };
     });
   }, [schoolCodes, schoolNames, allYears]);
@@ -50,12 +87,14 @@ function PastPapersContent() {
   const { data: schoolYears } = useYearsBySchool(resolvedSchoolId)
 
   // State
-  const [selectedYear, setSelectedYear] = useState<number | null>(null)
+ 
   const [searchQuery, setSearchQuery] = useState('')
   const [examFilter, setExamFilter] = useState<'all' | 'main' | 'supplementary' | 'cat'>('all')
   const [semesterFilter, setSemesterFilter] = useState<'all' | 'first' | 'second'>('all')
   const [papers, setPapers] = useState<PastPaper[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  
+  const isLoading = selectedYear ? isYearLoading : isLatestLoading;
+
   const [previewPaper, setPreviewPaper] = useState<PastPaper | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [markingSchemePaper, setMarkingSchemePaper] = useState<PastPaper | null>(null)
@@ -87,27 +126,16 @@ function PastPapersContent() {
 
   
   useEffect(() => {
-    if (!selectedYear || !currentSchool) {
-      setPapers([])
-      return
+    let newPapers: PastPaper[] = [];
+
+    if (selectedYear && papersByYear?.content) {
+      newPapers = papersByYear.content.map(mapApiPaperToUi);
+    } else if (!selectedYear && latestPapers?.content) {
+      newPapers = latestPapers.content.map(mapApiPaperToUi);
     }
 
-    setIsLoading(true)
-    
-  
-    const timer = setTimeout(() => {
-      
-      const demoPapers = generateDemoPastPapers(
-        currentSchool.name,
-        currentSchool.abbreviation,
-        selectedYear
-      )
-      setPapers(demoPapers)
-      setIsLoading(false)
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [resolvedSchoolId, selectedYear, currentSchool])
+    setPapers(newPapers);
+  }, [selectedYear, papersByYear, latestPapers, schoolFromUrl, selectedSchoolId, currentPage]);
 
   
   const filteredPapers = useMemo(() => {
@@ -137,9 +165,15 @@ function PastPapersContent() {
   }, [papers, searchQuery, examFilter, semesterFilter])
 
 
+  const handlePageChange = useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   const handleSchoolChange = useCallback((schoolId: string) => {
     dispatch(setSelectedSchoolId(schoolId));
     setSelectedYear(null)
+    setCurrentPage(0) // Reset page on school change
     setSearchQuery('')
     setExamFilter('all')
     setSemesterFilter('all')
@@ -149,6 +183,7 @@ function PastPapersContent() {
 
   const handleYearChange = useCallback((year: number) => {
     setSelectedYear(year)
+    setCurrentPage(0) // Reset page on year change
     setSearchQuery('')
     setExamFilter('all')
     setSemesterFilter('all')
@@ -304,7 +339,7 @@ function PastPapersContent() {
           />
 
           {/* Show content only when year is selected */}
-          {selectedYear ? (
+          {filteredPapers.length > 0 || isLoading ? (
             <>
               {/* Search Bar */}
               <SearchBar
@@ -319,18 +354,28 @@ function PastPapersContent() {
               {isLoading ? (
                 <LoadingState />
               ) : (
-                <PaperList
-                  papers={filteredPapers}
-                  onPreview={handlePreview}
-                  onGenerateMarkingScheme={handleGenerateMarkingScheme}
-                  onUploadToAI={handleUploadToAI}
-                />
+                <>
+                  <PaperList
+                    papers={filteredPapers}
+                    onPreview={handlePreview}
+                    onGenerateMarkingScheme={handleGenerateMarkingScheme}
+                    onUploadToAI={handleUploadToAI}
+                  />
+                  
+                  {/* Pagination */}
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                    isLoading={isLoading}
+                  />
+                </>
               )}
             </>
           ) : (
-            <EmptyState 
-              schoolName={currentSchool.name}
-              hasSelectedYear={false}
+             <EmptyState
+              schoolName={currentSchool?.name}
+              hasSelectedYear={!!selectedYear}
             />
           )}
         </div>
