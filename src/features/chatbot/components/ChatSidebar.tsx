@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, MessageCircle } from 'lucide-react'
+import { Plus, MessageCircle, X } from 'lucide-react'
 import { ChatHistorySection } from '@/types'
 
 interface ChatSidebarProps {
@@ -104,6 +104,17 @@ export default function ChatSidebar({
           <span className={`font-semibold ${isLight ? 'text-gray-900' : 'text-white'}`}>
             Chat History
           </span>
+          <button
+            onClick={onClose}
+            className={`p-2 rounded-lg transition-colors ${
+              isLight 
+                ? 'hover:bg-gray-100 text-gray-500' 
+                : 'hover:bg-white/10 text-gray-400'
+            }`}
+            aria-label="Close sidebar"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* New Chat Button */}

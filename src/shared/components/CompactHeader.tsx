@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, User, Award } from 'lucide-react'
+import { ArrowLeft, User, Award, Menu, X } from 'lucide-react'
 import { ROUTES } from '@/shared/constants'
 import ThemeToggle from './ThemeToggle'
 
@@ -9,23 +9,39 @@ interface CompactHeaderProps {
   showBackButton?: boolean
   backHref?: string
   backLabel?: string
+  onToggleSidebar?: () => void
+  isSidebarOpen?: boolean
 }
 
 export default function CompactHeader({ 
   showBackButton = true, 
   backHref = '/',
-  backLabel = 'Back to Home'
+  backLabel = 'Back to Home',
+  onToggleSidebar,
+  isSidebarOpen = false
 }: CompactHeaderProps) {
   return (
     <nav className="bg-dark border-b border-dark-lighter px-4 md:px-[5%] py-4 flex-shrink-0">
       <div className="max-w-[1400px] mx-auto flex justify-between items-center">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 text-primary font-bold text-xl md:text-2xl">
-          <div className="w-10 h-10 md:w-11 md:h-11 bg-primary text-dark rounded-xl flex items-center justify-center font-bold text-lg">
-            OS
-          </div>
-          <span>Okoa Sem</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className="lg:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-dark-card text-white hover:bg-dark-lighter active:bg-dark-elevated transition-all border border-dark-lighter"
+              aria-label={isSidebarOpen ? 'Close menu' : 'Open menu'}
+            >
+              {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          )}
+
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-3 text-primary font-bold text-xl md:text-2xl">
+            <div className="w-10 h-10 md:w-11 md:h-11 bg-primary text-dark rounded-xl flex items-center justify-center font-bold text-lg">
+              OS
+            </div>
+            <span>Okoa Sem</span>
+          </Link>
+        </div>
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 md:gap-3">
