@@ -5,7 +5,7 @@ const PAYMENT_BASE = '/payments';
 
 const SUBSCRIPTION_BASE = '/subscriptions';
 
-export const PaymentService = {
+const PaymentService = {
     /**
      * 1. Initiate STK Push Payment
      * Initiates an M-Pesa STK Push to the user's phone

@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 
-import { Inter } from 'next/font/google'
-
 import { AuthProvider } from '@/app/providers/authentication-provider/AuthenticationProvider';
+
 import { QueryProvider } from '@/app/providers/query-provider/QueryProvider';
+
 import StoreProvider from '@/app/providers/store-provider/StoreProvider';
+
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+import { PaymentProvider } from './providers/payments-provider/PaymentsProvider';
 
 export const metadata: Metadata = {
   title: 'Okoa Sem - Access Past Papers & Study Resources',
@@ -22,11 +23,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="scroll-smooth">
-      <body className={inter.className}>
+      <body>
         <StoreProvider>
           <QueryProvider>
             <AuthProvider>
-              {children}
+              <PaymentProvider>
+                {children}
+              </PaymentProvider>
             </AuthProvider>
           </QueryProvider>
         </StoreProvider>

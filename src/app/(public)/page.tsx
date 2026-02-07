@@ -21,10 +21,8 @@ export default function HomePage() {
 
       <FeaturesSection />
 
-      
-
       <SchoolsSection />
-
+      
       <section id="how-it-works" className="section-padding bg-dark">
         <div className="container-custom max-w-6xl">
           <div className="text-center max-w-3xl mx-auto mb-16">

@@ -1,8 +1,12 @@
+// Update your PricingSection.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
 import { Check } from 'lucide-react'
 import { PRICING } from '@/shared/constants'
+import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
+
+import PaymentModal from '@/shared/components/payment/PaymentModal'
 
 const plans = [
   {
@@ -37,14 +41,17 @@ const plans = [
 
 export default function PricingSection() {
   const [isLight, setIsLight] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const { isAuthenticated } = useAuth()
 
   useEffect(() => {
     const checkTheme = () => {
       setIsLight(document.body.classList.contains('light-theme'))
     }
-    
+
     checkTheme()
-    
+
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.attributeName === 'class') {
@@ -52,97 +59,140 @@ export default function PricingSection() {
         }
       })
     })
-    
+
     observer.observe(document.body, { attributes: true })
-    
+
     return () => observer.disconnect()
   }, [])
 
-  return (
-    <section 
-      id="pricing" 
-      className="section-padding"
-      style={{
-        background: isLight ? '#E0F2F1' : '#1A1A1A',
-      }}
-    >
-      <div className="container-custom max-w-5xl">
-        {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">
-            Choose Your Plan
-          </h2>
-          <p className="text-xl text-text-gray">
-            Unlock premium access to all past papers and study materials
-          </p>
-        </div>
+  const handlePlanSelect = (plan: typeof plans[0]) => {
+    if (!isAuthenticated) {
+      // You could redirect to login or show a login modal
+      alert('Please login or register to subscribe')
+      return
+    }
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 gap-8 mb-12">
-          {plans.map((plan) => (
-            <div
-              key={plan.id}
-              className={`relative bg-dark-card rounded-3xl p-8 transition-all hover:-translate-y-2 ${
-                plan.popular
+    setSelectedPlan(plan)
+    setShowPaymentModal(true)
+  }
+
+  const handlePaymentSuccess = (data: any) => {
+    console.log('Payment successful:', data)
+    // You could show a toast notification here
+    alert(`Payment initiated for ${selectedPlan?.name} plan! Check your phone.`)
+  }
+
+  const handlePaymentError = (error: string) => {
+    console.error('Payment error:', error)
+    alert(`Payment failed: ${error}`)
+  }
+
+  return (
+    <>
+      <section
+        id="pricing"
+        className="section-padding"
+        style={{
+          background: isLight ? '#E0F2F1' : '#1A1A1A',
+        }}
+      >
+        <div className="container-custom max-w-5xl">
+          {/* Section Header */}
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">
+              Choose Your Plan
+            </h2>
+            <p className="text-xl text-text-gray">
+              Unlock premium access to all past papers and study materials
+            </p>
+          </div>
+
+          {/* Pricing Cards */}
+          <div className="grid md:grid-cols-2 gap-8 mb-12">
+            {plans.map((plan) => (
+              <div
+                key={plan.id}
+                className={`relative bg-dark-card rounded-3xl p-8 transition-all hover:-translate-y-2 ${plan.popular
                   ? 'border-2 border-primary shadow-2xl shadow-primary/20'
                   : 'border border-dark-lighter'
-              }`}
-            >
-              {/* Popular Badge */}
-              {plan.popular && (
-                <div className="absolute -top-4 right-8 bg-primary text-dark px-6 py-2 rounded-full font-semibold text-sm">
-                  Most Popular
+                  }`}
+              >
+                {/* Popular Badge */}
+                {plan.popular && (
+                  <div className="absolute -top-4 right-8 bg-primary text-dark px-6 py-2 rounded-full font-semibold text-sm">
+                    Most Popular
+                  </div>
+                )}
+
+                {/* Plan Header */}
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold mb-4">{plan.name}</h3>
+
+                  {/* Price */}
+                  <div className="flex items-baseline justify-center gap-2 mb-2">
+                    <span className="text-lg text-text-gray">KSh</span>
+                    <span className="text-5xl font-bold text-primary">
+                      {plan.price}
+                    </span>
+                  </div>
+                  <p className="text-text-gray">{plan.duration}</p>
                 </div>
-              )}
 
-              {/* Plan Header */}
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold mb-4">{plan.name}</h3>
-                
-                {/* Price */}
-                <div className="flex items-baseline justify-center gap-2 mb-2">
-                  <span className="text-lg text-text-gray">KSh</span>
-                  <span className="text-5xl font-bold text-primary">
-                    {plan.price}
-                  </span>
-                </div>
-                <p className="text-text-gray">{plan.duration}</p>
-              </div>
+                {/* Features List */}
+                <ul className="space-y-4 mb-8">
+                  {plan.features.map((feature) => (
+                    <li
+                      key={feature}
+                      className="flex items-start gap-3 text-text-gray pb-3 border-b border-dark-lighter last:border-0"
+                    >
+                      <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
 
-              {/* Features List */}
-              <ul className="space-y-4 mb-8">
-                {plan.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="flex items-start gap-3 text-text-gray pb-3 border-b border-dark-lighter last:border-0"
-                  >
-                    <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              {/* CTA Button */}
-              <button
-                className={`w-full py-4 rounded-xl font-semibold transition-all ${
-                  plan.popular
+                {/* CTA Button */}
+                <button
+                  onClick={() => handlePlanSelect(plan)}
+                  className={`w-full py-4 rounded-xl font-semibold transition-all ${plan.popular
                     ? 'bg-primary text-dark hover:bg-primary-dark'
                     : 'bg-transparent border-2 border-primary text-primary hover:bg-primary hover:text-dark'
-                }`}
-              >
-                Select {plan.name}
-              </button>
-            </div>
-          ))}
-        </div>
+                    }`}
+                >
+                  Select {plan.name}
+                </button>
+              </div>
+            ))}
+          </div>
 
-        {/* Payment Info */}
-        <div className="text-center">
-          <p className="text-text-gray">
-            Secure payment via <span className="text-primary font-semibold">M-Pesa</span>
-          </p>
+          {/* Payment Info */}
+          <div className="text-center">
+            <p className="text-text-gray">
+              Secure payment via <span className="text-primary font-semibold">M-Pesa</span>
+            </p>
+            {!isAuthenticated && (
+              <p className="text-sm text-text-gray mt-2">
+                Login or register to subscribe
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      {/* Payment Modal */}
+      {selectedPlan && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setSelectedPlan(null)
+          }}
+          planName={selectedPlan.name}
+          amount={selectedPlan.price}
+          onSuccess={handlePaymentSuccess}
+          onError={handlePaymentError}
+        />
+      )}
+    </>
   )
 }

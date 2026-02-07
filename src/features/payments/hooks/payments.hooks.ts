@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { PaymentService } from '../services';
+
+import PaymentService from '../services/paymentsService';
+
 
 // Query keys
 export const paymentQueryKeys = {
