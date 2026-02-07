@@ -1,8 +1,8 @@
-@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@500,700,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
 
 @import "tailwindcss";
 
-@import '../fonts/fonts.css';
+/* @import '../fonts/fonts.css'; */
 
 
 /* ===== TAILWIND V4 THEME CONFIGURATION ===== */
@@ -390,6 +390,11 @@
 }
 
 /* ===== LIGHT THEME ===== */
+
+body{
+  font-family:'Outfit',sans-serif;
+}
+
 body.light-theme {
   background-color: var(--color-light);
   color: var(--color-light-text);
