@@ -1,10 +1,12 @@
 import { configureStore } from '@reduxjs/toolkit';
 import uiReducer from './slices/ui.slice';
+import youtubeReducer from '@/features/youtube/slices/youtube.slice';
 
 export const makeStore = () => {
   return configureStore({
     reducer: {
       ui: uiReducer,
+      youtube: youtubeReducer,
     },
   });
 };

@@ -2,28 +2,32 @@
  * YouTube Feature Types
  */
 
-export interface YouTubeVideo {
+export interface YouTubeVideoFromAPI {
   id: string;
-  videoId: string;
   title: string;
   description: string;
-  channel: string;
-  thumbnail: string;
-  duration: number;
-  viewCount: number;
-  subject?: string;
-  topic?: string;
-  addedAt: string;
+  thumbnail_url: string;
+  channel_title: string;
+  published_at: string;
+  duration: string;
+  view_count: string;
 }
 
-export interface Playlist {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string;
-  videos: YouTubeVideo[];
-  createdAt: string;
-  updatedAt: string;
+export interface YouTubeSearchResponse {
+  success: boolean;
+  message: string;
+  data: {
+    videos: YouTubeVideoFromAPI[];
+    total_results: number;
+    next_page_token: string;
+  };
+}
+
+export interface YouTubeSearchRequest {
+  q: string;
+  max_results: number;
+  page_token?: string;
+  order: 'relevance' | 'date' | 'viewCount' | 'rating' | 'title';
 }
 
 export interface PlaylistCreateInput {

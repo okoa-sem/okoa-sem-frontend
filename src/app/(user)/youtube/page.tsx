@@ -13,8 +13,9 @@ import LoadingState from '@/features/youtube/components/LoadingState'
 import VideoPlayerModal from '@/features/youtube/components/VideoPlayerModal'
 import SavedVideosSidebar from '@/features/youtube/components/SavedVideosSidebar'
 import CreatePlaylistModal from '@/features/youtube/components/CreatePlaylistModal'
-
-const API_KEY = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY || ''
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { setQuery } from '@/features/youtube/slices/youtube.slice';
+import { searchVideos } from '@/features/youtube/api/search'
 
 // localStorage keys
 const STORAGE_KEYS = {
@@ -25,8 +26,8 @@ const STORAGE_KEYS = {
 type SearchState = 'idle' | 'loading' | 'results' | 'empty'
 
 export default function YouTubePage() {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [currentQuery, setCurrentQuery] = useState('')
+  const dispatch = useAppDispatch();
+  const searchQuery = useAppSelector((state) => state.youtube.query);
   const [videos, setVideos] = useState<YouTubeVideo[]>([])
   const [searchState, setSearchState] = useState<SearchState>('idle')
   const resultsRef = useRef<HTMLDivElement>(null)
@@ -68,68 +69,54 @@ export default function YouTubePage() {
     localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists))
   }, [playlists])
 
-  
   const performSearch = async (query: string) => {
     if (!query.trim()) {
       alert('Please enter a search term')
       return
     }
 
-    setCurrentQuery(query)
     setSearchState('loading')
 
     try {
-      if (API_KEY) {
-        const response = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&q=${encodeURIComponent(query + ' tutorial')}&type=video&key=${API_KEY}`
-        )
+      const response = await searchVideos({
+        q: query,
+        max_results: 20,
+        order: 'relevance',
+      })
 
-        if (!response.ok) throw new Error('API call failed')
-
-        const data = await response.json()
-        
-        if (data.items && data.items.length > 0) {
-          const formattedVideos: YouTubeVideo[] = data.items.map((item: {
-            id: { videoId: string }
-            snippet: {
-              title: string
-              channelTitle: string
-              publishedAt: string
-              description: string
-              thumbnails: { medium: { url: string }, high?: { url: string } }
-            }
-          }) => ({
-            id: item.id.videoId,
-            title: item.snippet.title,
-            channel: item.snippet.channelTitle,
-            thumbnailUrl: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium.url,
-            views: '',
-            publishedAt: new Date(item.snippet.publishedAt).toLocaleDateString(),
-            description: item.snippet.description,
-          }))
-          setVideos(formattedVideos)
-          setSearchState('results')
-        } else {
-          setVideos([])
-          setSearchState('empty')
-        }
-      } else {
-        const demoVideos = generateDemoVideos(query)
-        setVideos(demoVideos)
+      if (response.success && response.data.videos && response.data.videos.length > 0) {
+        const formattedVideos: YouTubeVideo[] = response.data.videos.map(video => ({
+          id: video.id,
+          title: video.title,
+          channel: video.channel_title,
+          thumbnailUrl: video.thumbnail_url,
+          views: video.view_count,
+          publishedAt: new Date(video.published_at).toLocaleDateString(),
+          description: video.description,
+          duration: video.duration,
+        }))
+        setVideos(formattedVideos)
         setSearchState('results')
+      } else {
+        setVideos([])
+        setSearchState('empty')
       }
     } catch (error) {
-      console.error('YouTube API error:', error)
-      const demoVideos = generateDemoVideos(query)
-      setVideos(demoVideos)
-      setSearchState('results')
+      console.error('Search error:', error)
+      alert('Error searching videos. Please try again.')
+      setSearchState('empty')
     }
   }
 
+  useEffect(() => {
+    if (searchQuery) {
+      performSearch(searchQuery);
+    }
+  }, [searchQuery]);
+
   const handleSearch = () => performSearch(searchQuery)
   const handleTopicClick = (topic: string) => {
-    setSearchQuery(topic)
-    performSearch(topic)
+    dispatch(setQuery(topic));
   }
 
   
@@ -243,8 +230,6 @@ export default function YouTubePage() {
           </div>
           
           <SearchSection
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
             onSearch={handleSearch}
           />
           
@@ -253,12 +238,12 @@ export default function YouTubePage() {
           <div ref={resultsRef}>
             {searchState === 'idle' && <EmptyState />}
             
-            {searchState === 'loading' && <LoadingState query={currentQuery} />}
+            {searchState === 'loading' && <LoadingState query={searchQuery} />}
             
             {searchState === 'results' && (
               <VideoResults
                 videos={videos}
-                query={currentQuery}
+                query={searchQuery}
                 onVideoClick={handleVideoClick}
                 savedVideoIds={savedVideoIds}
                 onSaveVideo={handleSaveVideo}
