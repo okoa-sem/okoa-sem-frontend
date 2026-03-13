@@ -31,8 +31,9 @@ export default function VideoPlayerModal({
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
+  const iframeContainerRef = useRef<HTMLDivElement>(null)
 
-  // Handle fullscreen changes
+  // Handle fullscreen changes via Fullscreen API
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
@@ -42,7 +43,7 @@ export default function VideoPlayerModal({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
-  // Handle ESC key to close modal
+  // Handle ESC key to close modal (only when not in fullscreen)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !document.fullscreenElement) {
@@ -89,12 +90,30 @@ export default function VideoPlayerModal({
   const toggleFullscreen = async () => {
     try {
       if (!document.fullscreenElement) {
+        // Request fullscreen on the modal
         await modalRef.current?.requestFullscreen()
       } else {
+        // Exit fullscreen
         await document.exitFullscreen()
       }
     } catch (err) {
       console.error('Fullscreen error:', err)
+    }
+  }
+
+  // Prevent iframe's native fullscreen button from working
+  // This stops the browser's default fullscreen behavior
+  const handleIframeLoad = () => {
+    try {
+      // This helps ensure the iframe doesn't intercept fullscreen requests
+      const iframe = iframeContainerRef.current?.querySelector('iframe') as HTMLIFrameElement
+      if (iframe) {
+        iframe.addEventListener('fullscreenchange', (e) => {
+          e.stopPropagation()
+        }, true)
+      }
+    } catch (err) {
+      console.error('Error setting up iframe:', err)
     }
   }
 
@@ -143,20 +162,29 @@ export default function VideoPlayerModal({
         </div>
 
         {/* Main Content - Side by side on large screens */}
-        {!isFullscreen ? (
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-            {/* Video Player*/}
-            <div className="lg:flex-1 h-full bg-black">
-              <iframe
-                src={`https://www.youtube.com/embed/${video.id}?autoplay=1&rel=0`}
-                title={video.title}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                allowFullScreen
-              />
-            </div>
+        <div className={`flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0 ${isFullscreen ? 'lg:flex-col' : ''}`}>
+          {/* Video Player - Single persistent iframe */}
+          <div 
+            ref={iframeContainerRef}
+            className={`${
+              isFullscreen 
+                ? 'w-full h-full' 
+                : 'lg:flex-1 h-full bg-black'
+            } bg-black`}
+          >
+            <iframe
+              key={`video-${video.id}`}
+              onLoad={handleIframeLoad}
+              src={`https://www.youtube.com/embed/${video.id}?autoplay=1&rel=0&fs=0`}
+              title={video.title}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen={false}
+            />
+          </div>
 
-            {/* Video Info Sidebar */}
+          {/* Video Info Sidebar - Hidden in fullscreen */}
+          {!isFullscreen && (
             <div className="lg:w-[400px] flex-shrink-0 overflow-y-auto border-l border-dark-lighter bg-dark-card">
               <div className="p-4">
                 {/* Title */}
@@ -281,19 +309,8 @@ export default function VideoPlayerModal({
                 </div>
               </div>
             </div>
-          </div>
-        ) : (
-          /* Fullscreen Video */
-          <div className="flex-1 bg-black">
-            <iframe
-              src={`https://www.youtube.com/embed/${video.id}?autoplay=1&rel=0`}
-              title={video.title}
-              className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-              allowFullScreen
-            />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
