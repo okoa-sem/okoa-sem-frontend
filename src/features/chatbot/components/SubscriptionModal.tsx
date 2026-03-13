@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { ArrowLeft, X, Award, Calendar, CalendarDays, CreditCard, Info, Phone } from 'lucide-react'
 import { SubscriptionPlan } from '@/types'
 import { SUBSCRIPTION_PLANS } from '@/shared/constants'
+import { useMutation } from '@tanstack/react-query';
+import PaymentService from '@/features/payments/services/paymentsService';
+import { StkPushRequest } from '@/features/payments/types';
 
 type ModalStep = 'plan-selection' | 'phone-input' | 'processing'
 
@@ -22,6 +25,22 @@ export default function SubscriptionModal({
   const [selectedPlan, setSelectedPlan] = useState<'daily' | 'monthly'>('monthly')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [phoneError, setPhoneError] = useState('')
+
+  const { mutate: initiateStkPush, isPending: isProcessing } = useMutation({
+    mutationFn: (data: StkPushRequest) => PaymentService.initiateStkPush(data),
+    onSuccess: (data) => {
+      // The backend will send a websocket message upon payment completion.
+      // The websocket connection is handled elsewhere.
+      // For now, we can assume the parent component will handle the success state.
+      console.log('STK Push initiated successfully:', data);
+      setStep('processing');
+    },
+    onError: (error) => {
+      console.error('Payment initiation failed:', error);
+      alert(`Payment initiation failed: ${error.message}`);
+      setStep('phone-input'); // Go back to phone input on error
+    },
+  });
 
   if (!isOpen) return null
 
@@ -72,14 +91,13 @@ export default function SubscriptionModal({
   const initiatePayment = () => {
     if (!validatePhone(phoneNumber)) return
 
-    setStep('processing')
+    const stkPushRequest: StkPushRequest = {
+      phone_number: `254${phoneNumber}`,
+      amount: plan.price,
+      description: `Subscription to ${plan.name}`,
+    };
 
-    // Simulate payment processing
-    setTimeout(() => {
-      
-      onPaymentSuccess(plan)
-      handleClose()
-    }, 3000)
+    initiateStkPush(stkPushRequest);
   }
 
   const handleClose = () => {
@@ -100,7 +118,7 @@ export default function SubscriptionModal({
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/90"
-        onClick={step !== 'processing' ? handleClose : undefined}
+        onClick={step !== 'processing' && !isProcessing ? handleClose : undefined}
       />
 
       {/* Modal */}
@@ -328,8 +346,8 @@ export default function SubscriptionModal({
                 <div className="w-full h-full border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
               </div>
 
-              <h3 className="text-xl font-semibold text-blue-500 mb-2">Initiating Payment</h3>
-              <p className="text-text-gray mb-6">Setting up M-Pesa payment request...</p>
+              <h3 className="text-xl font-semibold text-blue-500 mb-2">Processing Payment</h3>
+              <p className="text-text-gray mb-6">Please check your phone to complete the M-Pesa payment.</p>
 
               {/* Progress Bar */}
               <div className="w-full h-1 bg-blue-500/20 rounded-full overflow-hidden mb-6">
@@ -354,6 +372,7 @@ export default function SubscriptionModal({
 
               <button
                 onClick={cancelPayment}
+                disabled={isProcessing}
                 className="w-full border-2 border-red-500 text-red-500 py-3.5 rounded-xl font-semibold hover:bg-red-500 hover:text-white transition-colors"
               >
                 Cancel Payment

@@ -9,6 +9,8 @@ import ChatMessage from '@/features/chatbot/components/ChatMessage'
 import TypingIndicator from '@/features/chatbot/components/TypingIndicator'
 import ChatInput from '@/features/chatbot/components/ChatInput'
 import SubscriptionModal from '@/features/chatbot/components/SubscriptionModal'
+import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 
 const generateId = () => Math.random().toString(36).substr(2, 9)
 
@@ -61,6 +63,7 @@ export default function ChatbotPage() {
   const [isLight, setIsLight] = useState(false)
 
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const { user, checkAuthentication } = useAuth()
 
   useEffect(() => {
     const checkTheme = () => {
@@ -212,24 +215,13 @@ export default function ChatbotPage() {
     setSidebarOpen(false)
   }
 
-  const handleSubscriptionSuccess = (plan: SubscriptionPlan) => {
-    const expiresAt = new Date()
-    if (plan.id === 'daily') {
-      expiresAt.setDate(expiresAt.getDate() + 1)
-    } else {
-      expiresAt.setDate(expiresAt.getDate() + 30)
-    }
-
-    const newSubscription: UserSubscription = {
-      isActive: true,
-      plan,
-      expiresAt,
-    }
-
-    setSubscription(newSubscription)
-    localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION, JSON.stringify(newSubscription))
+  const handleSubscriptionSuccess = () => {
     setShowSubscriptionModal(false)
+    checkAuthentication()
+    alert('Payment successful! Your subscription is now active.')
   }
+
+  usePayments(handleSubscriptionSuccess)
 
   // Theme-aware styles
   const getPageStyle = (): React.CSSProperties => ({

@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (userData: User, token: string) => void;
   logout: () => void;
   updateUser: (userData: User) => void;
+  checkAuthentication: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,6 +26,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(JSON.parse(storedUser));
     }
   }, []);
+
+  const checkAuthentication = () => {
+    const storedUser = localStorage.getItem('user');
+    const token = localStorage.getItem('authToken');
+    if (storedUser && token) {
+      setUser(JSON.parse(storedUser));
+    } else {
+      setUser(null);
+    }
+  };
 
   const login = (userData: User, token: string) => {
     // 1. Keep LocalStorage for your API Interceptors
@@ -59,7 +70,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, updateUser, checkAuthentication }}>
       {children}
     </AuthContext.Provider>
   );
