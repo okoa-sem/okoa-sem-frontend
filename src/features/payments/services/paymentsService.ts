@@ -68,11 +68,16 @@ const PaymentService = {
             `${SUBSCRIPTION_BASE}/check-access`
         );
 
+        console.log('[PaymentService.checkChatAccess] Response:', response.data);
+
         if (!response.data.success) {
+            console.warn('[PaymentService.checkChatAccess] Success flag is false:', response.data.message);
             throw new Error(response.data.message || 'Failed to check chat access');
         }
 
-        return response.data.data || false;
+        const hasAccess = response.data.data || false;
+        console.log('[PaymentService.checkChatAccess] User has access:', hasAccess);
+        return hasAccess;
     }
 };
 

@@ -196,14 +196,14 @@ export const SUBSCRIPTION_PLANS = {
     name: 'Daily Plan',
     duration: '24 hours access',
     durationLabel: '1 Day',
-    price: 10,
+    price: 20,
   },
   monthly: {
     id: 'monthly' as const,
     name: 'Monthly Plan',
     duration: '30 days access',
     durationLabel: '30 Days',
-    price: 100,
+    price: 130,
   },
 } as const
 

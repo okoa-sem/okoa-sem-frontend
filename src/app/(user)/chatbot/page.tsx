@@ -11,6 +11,8 @@ import ChatInput from '@/features/chatbot/components/ChatInput'
 import SubscriptionModal from '@/features/chatbot/components/SubscriptionModal'
 import { usePayments } from '@/features/payments/hooks/usePayments'
 import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
+import { useWebSocketMessage } from '@/features/chatbot/hooks/websocket/useWebSocketMessage'
+import { chatService } from '@/features/chatbot/services/chatService'
 
 const generateId = () => Math.random().toString(36).substr(2, 9)
 
@@ -55,15 +57,42 @@ export default function ChatbotPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeChatId, setActiveChatId] = useState<string | null>('chat-1')
+  const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatHistorySection[]>([])
   const [subscription, setSubscription] = useState<UserSubscription>({ isActive: false })
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
   const [hasCheckedSubscription, setHasCheckedSubscription] = useState(false)
   const [isLight, setIsLight] = useState(false)
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
 
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const { user, checkAuthentication } = useAuth()
+
+  // Get auth token
+  const authToken = typeof window !== 'undefined' 
+    ? localStorage.getItem('authToken') || null
+    : null
+
+  // WebSocket hook for real-time messaging
+  const {
+    isLoading,
+    streamedContent,
+    fullResponse,
+    error: wsError,
+    sendMessage: sendViaWebSocket,
+  } = useWebSocketMessage(
+    activeChatId,
+    authToken,
+    !!activeChatId && subscription.isActive, // autoConnect only if we have session and subscription
+    (message) => {
+      // Called when message is fully received
+      console.log('[ChatbotPage] Message received:', message);
+    },
+    (error) => {
+      // Called on error
+      console.error('[ChatbotPage] WebSocket error:', error);
+    }
+  )
 
   useEffect(() => {
     const checkTheme = () => {
@@ -126,12 +155,64 @@ export default function ChatbotPage() {
   }, [])
 
   useEffect(() => {
+    if (subscription.isActive && !showSubscriptionModal) {
+      // Load existing sessions from the API
+      const loadSessions = async () => {
+        try {
+          const sessions = await chatService.getAllSessions()
+          if (sessions && sessions.length > 0) {
+            // Convert API sessions to chat history format
+            const todayLabel = 'Today'
+            const groupedSessions: ChatHistorySection[] = [
+              {
+                label: todayLabel,
+                items: sessions.map((session) => ({
+                  id: session.sessionId,
+                  title: session.title,
+                  time: getTimeString(new Date(session.createdAt)),
+                  date: new Date(session.createdAt),
+                })),
+              },
+            ]
+            setChatHistory(groupedSessions)
+            // Set the first session as active and load its messages
+            if (!activeChatId && sessions.length > 0) {
+              setActiveChatId(sessions[0].sessionId)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load chat sessions:', error)
+          // Fall back to local storage
+        }
+      }
+      loadSessions()
+    }
+  }, [subscription.isActive, showSubscriptionModal])
+
+  useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
     }
   }, [messages, isTyping])
 
-  const handleSendMessage = useCallback((content: string) => {
+  const handleSendMessage = useCallback(async (content: string) => {
+    // If no session, create one first
+    if (!activeChatId) {
+      setIsCreatingSession(true)
+      try {
+        const session = await chatService.createSession()
+        setActiveChatId(session.sessionId)
+        // Don't return here - continue to send message after setting session
+      } catch (error) {
+        console.error('Failed to create chat session:', error)
+        setIsCreatingSession(false)
+        return
+      } finally {
+        setIsCreatingSession(false)
+      }
+    }
+
+    // Add user message to UI immediately
     const userMessage: ChatMessageType = {
       id: generateId(),
       role: 'user',
@@ -140,66 +221,72 @@ export default function ChatbotPage() {
     }
     setMessages((prev) => [...prev, userMessage])
 
+    // Create bot response placeholder
+    const botMessageId = generateId()
+    const botMessage: ChatMessageType = {
+      id: botMessageId,
+      role: 'assistant',
+      content: '', // Will be filled as stream arrives
+      timestamp: new Date(),
+    }
+    setMessages((prev) => [...prev, botMessage])
     setIsTyping(true)
 
-    setTimeout(() => {
+    try {
+      // Send message via WebSocket
+      await sendViaWebSocket(content)
+    } catch (error) {
+      console.error('Failed to send message:', error)
       setIsTyping(false)
+      // Remove the placeholder message on error
+      setMessages((prev) => prev.slice(0, -1))
+    }
+  }, [activeChatId, sendViaWebSocket])
 
-      const responses = CHATBOT_CONFIG.DEMO_RESPONSES
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)]
-
-      const botMessage: ChatMessageType = {
-        id: generateId(),
-        role: 'assistant',
-        content: randomResponse,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, botMessage])
-
-      if (messages.length === 1) {
-        const newHistoryItem = {
-          id: activeChatId || generateId(),
-          title: content.slice(0, 30) + (content.length > 30 ? '...' : ''),
-          time: getTimeString(new Date()),
-          date: new Date(),
-        }
-
-        setChatHistory((prev) => {
+  // Update streaming content in real-time
+  useEffect(() => {
+    if (streamedContent && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1]
+      if (lastMessage.role === 'assistant') {
+        setMessages((prev) => {
           const updated = [...prev]
-          if (updated[0]?.label === 'Today') {
-            const existingIndex = updated[0].items.findIndex(
-              (item) => item.id === activeChatId
-            )
-            if (existingIndex >= 0) {
-              updated[0].items[existingIndex] = newHistoryItem
-            } else {
-              updated[0].items.unshift(newHistoryItem)
-            }
-          } else {
-            updated.unshift({
-              label: 'Today',
-              items: [newHistoryItem],
-            })
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: streamedContent,
           }
-          localStorage.setItem(STORAGE_KEYS.CHAT_HISTORY, JSON.stringify(updated))
           return updated
         })
       }
-    }, 1500 + Math.random() * 1000)
-  }, [messages.length, activeChatId])
+    }
+  }, [streamedContent])
 
-  const handleNewChat = () => {
-    const newChatId = generateId()
-    setActiveChatId(newChatId)
-    setMessages([
-      {
-        id: generateId(),
-        role: 'assistant',
-        content: CHATBOT_CONFIG.WELCOME_MESSAGE,
-        timestamp: new Date(),
-      },
-    ])
-    setSidebarOpen(false)
+  // Handle when streaming is complete
+  useEffect(() => {
+    if (fullResponse && !isLoading) {
+      setIsTyping(false)
+      console.log('[ChatbotPage] Stream complete:', fullResponse)
+    }
+  }, [fullResponse, isLoading])
+
+  const handleNewChat = async () => {
+    setIsCreatingSession(true)
+    try {
+      const session = await chatService.createSession()
+      setActiveChatId(session.sessionId)
+      setMessages([
+        {
+          id: generateId(),
+          role: 'assistant',
+          content: CHATBOT_CONFIG.WELCOME_MESSAGE,
+          timestamp: new Date(),
+        },
+      ])
+    } catch (error) {
+      console.error('Failed to create new chat session:', error)
+    } finally {
+      setIsCreatingSession(false)
+      setSidebarOpen(false)
+    }
   }
 
   const handleSelectChat = (chatId: string) => {

@@ -39,7 +39,9 @@ export interface SubscriptionHistoryItem {
 }
 
 export interface WebSocketMessage {
-    type: 'CONNECTION_ESTABLISHED' | 'PAYMENT_INITIATED' | 'PAYMENT_STATUS_UPDATE' | 'SUBSCRIPTION_CREATED' | 'PONG';
+    type: 'CONNECTION_ESTABLISHED' | 'PAYMENT_INITIATED' | 'PAYMENT_STATUS_UPDATE' | 'SUBSCRIPTION_CREATED' | 'PONG' | 'PAYMENT_SUCCESS' | 'PAYMENT_FAILED' | 'ERROR';
     timestamp: string;
+    reference?: string;
+    reason?: string;
     [key: string]: any;
 }

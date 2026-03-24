@@ -26,16 +26,17 @@ export const useSubscriptionHistory = () => {
     return useQuery({
         queryKey: paymentQueryKeys.subscriptionHistory(),
         queryFn: () => PaymentService.getSubscriptionHistory(),
-        staleTime: 1000 * 60,
+        staleTime: 1000 * 30, // Reduced from 60s to 30s
     });
 };
 
-// Chat Access Query
-export const useChatAccess = () => {
+// Chat Access Query - with aggressive stale time for payment flow
+export const useChatAccess = (options?: { staleTime?: number; refetchInterval?: number }) => {
     return useQuery({
         queryKey: paymentQueryKeys.chatAccess(),
         queryFn: () => PaymentService.checkChatAccess(),
-        staleTime: 1000 * 30,
+        staleTime: options?.staleTime ?? 1000 * 10, // 10 seconds by default for payment flow
+        refetchInterval: options?.refetchInterval,
     });
 };
 
