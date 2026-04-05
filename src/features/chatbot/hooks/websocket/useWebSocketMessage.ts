@@ -1,34 +1,16 @@
-/**
- * useWebSocketMessage Hook
- * Higher-level hook for sending and receiving chat messages
- * Handles message state, loading, streaming, and error management
- * Simplifies component integration for chat UI
- */
-
 import { useState, useCallback, useEffect } from 'react';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
 	selectStreamingContent,
 	selectIsStreaming,
 	selectLastServerMessage,
 	selectSessionError,
+	initializeSession,
+	resetStreamingContent
 } from '../../slices/websocket.slice';
 import { useWebSocket } from './useWebSocket';
-import {
-	UseWebSocketMessageReturn,
-	ServerMessagePayload,
-} from '../../types/websocket';
+import { UseWebSocketMessageReturn, ServerMessagePayload } from '../../types/websocket';
 
-/**
- * Hook for chat message operations with WebSocket
- * Provides simplified interface for sending/receiving messages
- *
- * @param sessionId - Chat session ID
- * @param accessToken - JWT access token
- * @param autoConnect - Whether to auto-connect on mount (default: true)
- * @param onMessageReceived - Callback when message fully received
- * @param onError - Callback when error occurs
- */
 export const useWebSocketMessage = (
 	sessionId: string | null,
 	accessToken: string | null,
@@ -36,17 +18,21 @@ export const useWebSocketMessage = (
 	onMessageReceived?: (message: ServerMessagePayload) => void,
 	onError?: (error: string) => void
 ): UseWebSocketMessageReturn => {
-	// Local state
-	const [isLoading, setIsLoading] = useState(false);
+	const dispatch = useAppDispatch();
+	
+	const [isWaitingForNetwork, setIsWaitingForNetwork] = useState(false);
 	const [error, setError] = useState<string>();
-	const [messagesSent, setMessagesSent] = useState(0);
 
-	// WebSocket connection hook
+	useEffect(() => {
+		if (sessionId) {
+			dispatch(initializeSession(sessionId));
+		}
+	}, [sessionId, dispatch]);
+
 	const {
 		isConnected,
 		hasValidSubscription,
 		sendMessage: sendViWS,
-		connectionState,
 	} = useWebSocket(
 		autoConnect ? sessionId : null,
 		autoConnect ? accessToken : null,
@@ -54,116 +40,65 @@ export const useWebSocketMessage = (
 		(err) => {
 			setError(err);
 			onError?.(err);
+			setIsWaitingForNetwork(false);
 		}
 	);
 
-	// Redux selectors for this session
-	const streamedContent = useAppSelector((state) =>
-		selectStreamingContent(state, sessionId || '')
-	);
-	const isStreaming = useAppSelector((state) =>
-		selectIsStreaming(state, sessionId || '')
-	);
-	const fullResponse = useAppSelector((state) =>
-		selectLastServerMessage(state, sessionId || '')
-	);
-	const reduxError = useAppSelector((state) =>
-		selectSessionError(state, sessionId || '')
-	);
+	const streamedContent = useAppSelector((state) => selectStreamingContent(state, sessionId || ''));
+	const isStreaming = useAppSelector((state) => selectIsStreaming(state, sessionId || ''));
+	const fullResponse = useAppSelector((state) => selectLastServerMessage(state, sessionId || ''));
+	const reduxError = useAppSelector((state) => selectSessionError(state, sessionId || ''));
 
-	// Track if message is currently being sent
 	useEffect(() => {
 		if (isStreaming) {
-			setIsLoading(true);
-		} else if (messagesSent > 0 && !isStreaming) {
-			setIsLoading(false);
+			setIsWaitingForNetwork(false);
 		}
-	}, [isStreaming, messagesSent]);
+	}, [isStreaming]);
 
-	/**
-	 * Send message with validation and error handling
-	 */
 	const sendMessage = useCallback(
 		async (content: string): Promise<void> => {
-			if (!sessionId) {
-				throw new Error('No session ID');
-			}
-
-			if (!content.trim()) {
-				throw new Error('Message cannot be empty');
-			}
-
-			if (!isConnected) {
-				throw new Error('WebSocket not connected');
-			}
-
-			if (!hasValidSubscription) {
-				throw new Error('No valid subscription');
-			}
+			if (!sessionId) throw new Error('No session ID');
+			if (!content.trim()) throw new Error('Message cannot be empty');
+			if (!isConnected) throw new Error('WebSocket not connected');
+			if (!hasValidSubscription) throw new Error('No valid subscription');
 
 			try {
-				setIsLoading(true);
+				setIsWaitingForNetwork(true);
 				setError(undefined);
-				setMessagesSent((prev) => prev + 1);
+				dispatch(resetStreamingContent(sessionId));
 
 				await sendViWS(content);
 			} catch (err) {
-				const errorMsg =
-					err instanceof Error ? err.message : 'Failed to send message';
+				const errorMsg = err instanceof Error ? err.message : 'Failed to send message';
 				setError(errorMsg);
-				setIsLoading(false);
+				setIsWaitingForNetwork(false);
 				throw err;
 			}
 		},
-		[sessionId, isConnected, hasValidSubscription, sendViWS]
+		[sessionId, isConnected, hasValidSubscription, sendViWS, dispatch]
 	);
 
-	/**
-	 * Reset message state for new message
-	 */
 	const resetState = useCallback((): void => {
 		setError(undefined);
-		setIsLoading(false);
-		// Note: streamedContent is managed by Redux, not cleared here
-		// to allow viewing previous messages
+		setIsWaitingForNetwork(false);
 	}, []);
 
-	/**
-	 * Callbacks for message lifecycle (exported for advanced usage)
-	 */
-	const onMessageSent = useCallback((): void => {
-		console.log('[useWebSocketMessage] Message sent');
-	}, []);
+	const isLoading = isWaitingForNetwork || isStreaming;
 
-	const onStreamChunk = useCallback((chunk: string): void => {
-		console.log('[useWebSocketMessage] Stream chunk received:', chunk.length, 'chars');
-	}, []);
-
-	const onStreamComplete = useCallback((response: ServerMessagePayload): void => {
-		console.log('[useWebSocketMessage] Stream complete');
-	}, []);
-
-	// Update error from Redux
 	useEffect(() => {
-		if (reduxError) {
-			setError(reduxError);
-		}
+		if (reduxError) setError(reduxError);
 	}, [reduxError]);
 
 	return {
-		// State
 		isLoading,
+		isConnected,
 		streamedContent,
 		fullResponse: fullResponse || null,
 		error: error || reduxError,
-
-		// Actions
 		sendMessage,
 		resetState,
-
-		// Callbacks (for advanced usage)
-		onMessageSent,
-		onStreamChunk,
-		onStreamComplete,
+		onMessageSent: () => {},
+		onStreamChunk: () => {},
+		onStreamComplete: () => {},
 	};
 };

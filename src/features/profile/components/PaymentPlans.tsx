@@ -43,7 +43,7 @@ export default function PaymentPlans({ plans, onSelectPlan }: PaymentPlansProps)
         </div>
 
         {/* Plans Grid */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
           {plans.map((plan) => (
             <button
               key={plan.id}

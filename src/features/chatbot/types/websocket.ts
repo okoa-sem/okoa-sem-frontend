@@ -249,6 +249,7 @@ export interface UseWebSocketReturn {
 export interface UseWebSocketMessageReturn {
 	// State
 	isLoading: boolean;
+	isConnected: boolean;
 	streamedContent: string; // Accumulated streamed text
 	fullResponse: ServerMessagePayload | null;
 	error?: string;

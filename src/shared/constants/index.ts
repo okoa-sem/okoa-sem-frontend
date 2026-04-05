@@ -4,12 +4,17 @@ export const APP_DESCRIPTION = 'Access Past Papers & Study Resources'
 // Pricing
 export const PRICING = {
   DAILY: {
-    amount: 10,
+    amount: 20,
     duration: 1, // days
     name: 'Daily Plan',
   },
+  WEEKLY: {
+    amount: 80,
+    duration: 7, // days
+    name: 'Weekly Plan',
+  },
   MONTHLY: {
-    amount: 100,
+    amount: 130,
     duration: 30, // days
     name: 'Monthly Plan',
   },

@@ -1,47 +1,42 @@
-
 import { useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { WEBSOCKET_URL } from '@/config';
-import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider';
+import { PaymentWebSocket } from '../services/web-sockets.integration';
+import { paymentQueryKeys } from './payments.hooks';
 
 export const usePayments = (onPaymentSuccess: () => void) => {
   const [isConnected, setIsConnected] = useState(false);
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  
+  const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !authToken) return;
 
-    const socket: Socket = io(WEBSOCKET_URL, {
-      transports: ['websocket'],
-      auth: {
-        userId: user.id,
+    const ws = new PaymentWebSocket(
+      WEBSOCKET_URL,
+      authToken,
+      (message) => {
+        if (message.type === 'PAYMENT_SUCCESS') {
+          // Invalidate subscription queries to fetch fresh data
+          queryClient.invalidateQueries({ queryKey: paymentQueryKeys.chatAccess() });
+          queryClient.invalidateQueries({ queryKey: paymentQueryKeys.subscriptionHistory() });
+          
+          onPaymentSuccess();
+        }
       },
-    });
+      () => setIsConnected(true),
+      () => setIsConnected(false)
+    );
 
-    socket.on('connect', () => {
-      console.log('WebSocket connected');
-      setIsConnected(true);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('WebSocket disconnected');
-      setIsConnected(false);
-    });
-
-    socket.on('payment-success', (data) => {
-      console.log('Payment success message received:', data);
-      onPaymentSuccess();
-    });
-
-    socket.on('payment-error', (data) => {
-      console.error('Payment error message received:', data);
-      // Optionally, you can handle payment errors here
-    });
+    ws.connect();
 
     return () => {
-      socket.disconnect();
+      ws.disconnect();
     };
-  }, [user, onPaymentSuccess]);
+  }, [user, authToken, onPaymentSuccess, queryClient]);
 
   return { isConnected };
 };

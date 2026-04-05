@@ -136,7 +136,7 @@ export interface ChatHistorySection {
 
 // Subscription Types
 export interface SubscriptionPlan {
-  id: 'daily' | 'monthly'
+  id: 'daily' | 'weekly' | 'monthly'
   name: string
   duration: string
   durationLabel: string

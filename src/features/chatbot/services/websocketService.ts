@@ -1,9 +1,3 @@
-/**
- * WebSocket Service
- * Manages WebSocket connection lifecycle, message routing, and error handling
- * Singleton pattern for reliable connection management across app
- */
-
 import {
 	WebSocketConnectionContext,
 	WebSocketConnectionState,
@@ -23,18 +17,15 @@ import {
 	PongPayload,
 } from '../types/websocket';
 
-/**
- * Default WebSocket Configuration
- */
 const DEFAULT_CONFIG: WebSocketConfig = {
-	baseUrl: 'ws://localhost:8075/api/v1',
-	reconnectDelay: 1000, // Start with 1s
-	maxReconnectDelay: 30000, // Max 30s
+	baseUrl: process.env.NEXT_PUBLIC_CHATBOT_WEBSOCKET_URL || '',
+	reconnectDelay: 1000, 
+	maxReconnectDelay: 30000, 
 	reconnectBackoffMultiplier: 1.5,
 	maxReconnectAttempts: 10,
-	pingInterval: 30000, // Ping every 30s
-	messageTimeout: 30000, // 30s timeout for message send
-	streamChunkTimeout: 60000, // 60s timeout for stream chunks
+	pingInterval: 30000, 
+	messageTimeout: 30000, 
+	streamChunkTimeout: 60000, 
 };
 
 export class WebSocketService {
@@ -45,8 +36,8 @@ export class WebSocketService {
 	private messageQueue: MessageQueueItem[] = [];
 	private reconnectAttempts = 0;
 	private pingInterval: NodeJS.Timeout | null = null;
-	private streamBuffers: Map<string, StreamBuffer> = new Map(); // messageId -> buffer
-	private streamTimeouts: Map<string, NodeJS.Timeout> = new Map(); // messageId -> timeout
+	private streamBuffers: Map<string, StreamBuffer> = new Map(); 
+	private streamTimeouts: Map<string, NodeJS.Timeout> = new Map(); 
 	private eventListeners: Map<keyof WebSocketEventListeners, Function[]> = new Map();
 	private accessToken: string | null = null;
 
@@ -54,9 +45,6 @@ export class WebSocketService {
 		this.config = { ...DEFAULT_CONFIG, ...config };
 	}
 
-	/**
-	 * Get singleton instance
-	 */
 	public static getInstance(config?: Partial<WebSocketConfig>): WebSocketService {
 		if (!WebSocketService.instance) {
 			WebSocketService.instance = new WebSocketService(config);
@@ -64,14 +52,10 @@ export class WebSocketService {
 		return WebSocketService.instance;
 	}
 
-	/**
-	 * Connect to WebSocket
-	 * @param sessionId - Chat session ID
-	 * @param accessToken - JWT access token for authentication
-	 */
 	public async connect(sessionId: string, accessToken: string): Promise<void> {
-		if (this.ws && this.isConnected()) {
-			console.warn('[WebSocket] Already connected');
+        // FIX: Check if already OPEN *or* CONNECTING to prevent thrashing
+		if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+			console.warn('[WebSocket] Already connected or connecting');
 			return;
 		}
 
@@ -98,7 +82,6 @@ export class WebSocketService {
 					this.ws.onerror = (event) => this.handleError(event);
 					this.ws.onclose = () => this.handleClose();
 
-					// Timeout for connection
 					const connectTimeout = setTimeout(() => {
 						reject(
 							new WebSocketError(
@@ -108,7 +91,6 @@ export class WebSocketService {
 						);
 					}, this.config.messageTimeout);
 
-					// Override onopen to clear timeout
 					const originalOnOpen = this.ws.onopen;
 					const wsInstance = this.ws;
 					this.ws.onopen = (event: Event) => {
@@ -133,23 +115,15 @@ export class WebSocketService {
 		}
 	}
 
-	/**
-	 * Disconnect from WebSocket
-	 */
 	public disconnect(): void {
 		console.log('[WebSocket] Disconnecting...');
-
-		// Clear ping interval
 		if (this.pingInterval) {
 			clearInterval(this.pingInterval);
 			this.pingInterval = null;
 		}
-
-		// Clear stream timeouts
 		this.streamTimeouts.forEach((timeout) => clearTimeout(timeout));
 		this.streamTimeouts.clear();
 
-		// Close WebSocket
 		if (this.ws) {
 			this.ws.close(1000, 'Client disconnecting');
 			this.ws = null;
@@ -159,11 +133,6 @@ export class WebSocketService {
 		this.emit('onDisconnect', 'User initiated disconnect');
 	}
 
-	/**
-	 * Send message to server
-	 * Queues message if not connected
-	 * @param content - Message content
-	 */
 	public async sendMessage(content: string): Promise<void> {
 		const message = { type: 'message' as const, content };
 
@@ -187,19 +156,12 @@ export class WebSocketService {
 		this.send(message);
 	}
 
-	/**
-	 * Send ping to keep connection alive
-	 */
 	private sendPing(): void {
 		if (this.isConnected()) {
 			this.send({ type: 'ping' });
 		}
 	}
 
-	/**
-	 * Send message over WebSocket
-	 * @param message - Message to send
-	 */
 	private send(message: ClientMessage): void {
 		if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
 			throw new WebSocketError(
@@ -222,9 +184,6 @@ export class WebSocketService {
 		}
 	}
 
-	/**
-	 * Handle WebSocket open event
-	 */
 	private handleOpen(): void {
 		console.log('[WebSocket] Connected');
 		this.reconnectAttempts = 0;
@@ -233,24 +192,15 @@ export class WebSocketService {
 			isConnected: true,
 		});
 
-		// Start keep-alive pings
 		this.startKeepAlive();
-
-		// Process queued messages
 		this.processMessageQueue();
-
 		this.emit('onConnect', this.context!);
 	}
 
-	/**
-	 * Handle incoming WebSocket message
-	 * Routes to appropriate handler based on message type
-	 */
 	private handleMessage(event: MessageEvent): void {
 		try {
 			const message: ServerMessage = JSON.parse(event.data);
-			console.log('[WebSocket] Message received:', message);
-
+			
 			this.updateContext({
 				lastMessageTime: Date.now(),
 			});
@@ -274,52 +224,31 @@ export class WebSocketService {
 				case 'pong':
 					this.handlePong(message as PongPayload);
 					break;
-				default:
-					console.warn('[WebSocket] Unknown message type:', message);
 			}
 		} catch (error) {
 			console.error('[WebSocket] Failed to parse message:', error);
 		}
 	}
 
-	/**
-	 * Handle server message (complete exchange)
-	 */
 	private handleServerMessage(message: ServerMessagePayload): void {
 		this.emit('onMessage', message);
 		this.clearStreamBuffer(message.aiResponse.messageId);
 	}
 
-	/**
-	 * Handle stream chunk
-	 */
 	private handleStreamChunk(payload: StreamPayload): void {
 		this.emit('onStream', payload);
-
-		// For future streaming state management
-		// Store chunk in buffer if needed
 	}
 
-	/**
-	 * Handle stream end
-	 */
 	private handleStreamEnd(payload: StreamEndPayload): void {
 		this.emit('onStreamEnd', payload);
 		this.clearStreamTimeout(payload.messageId);
 	}
 
-	/**
-	 * Handle error message
-	 */
 	private handleErrorMessage(payload: ErrorPayload): void {
 		console.error('[WebSocket] Error from server:', payload.message);
 		this.emit('onError', payload);
 	}
 
-	/**
-	 * Handle subscription error
-	 * Prevents message sending and signals auth issue
-	 */
 	private handleSubscriptionError(payload: SubscriptionErrorPayload): void {
 		console.error('[WebSocket] Subscription error:', payload);
 		this.updateContext({
@@ -329,16 +258,10 @@ export class WebSocketService {
 		this.emit('onSubscriptionError', payload);
 	}
 
-	/**
-	 * Handle pong response
-	 */
 	private handlePong(payload: PongPayload): void {
 		this.emit('onPong');
 	}
 
-	/**
-	 * Handle WebSocket errors
-	 */
 	private handleError(event: Event): void {
 		console.error('[WebSocket] Error:', event);
 		const error = new WebSocketError(
@@ -348,16 +271,11 @@ export class WebSocketService {
 		this.updateContext({ state: 'ERROR', errorMessage: error.message });
 	}
 
-	/**
-	 * Handle WebSocket close
-	 * Attempts reconnection if not manually closed
-	 */
 	private handleClose(): void {
 		console.log('[WebSocket] Connection closed');
 		this.ws = null;
 		this.updateContext({ state: 'DISCONNECTED', isConnected: false });
 
-		// Attempt reconnection
 		if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
 			this.scheduleReconnect();
 		} else {
@@ -365,9 +283,6 @@ export class WebSocketService {
 		}
 	}
 
-	/**
-	 * Schedule reconnection with exponential backoff
-	 */
 	private scheduleReconnect(): void {
 		const delay = Math.min(
 			this.config.reconnectDelay *
@@ -394,9 +309,6 @@ export class WebSocketService {
 		}, delay);
 	}
 
-	/**
-	 * Process queued messages after connection
-	 */
 	private processMessageQueue(): void {
 		while (this.messageQueue.length > 0 && this.isConnected()) {
 			const item = this.messageQueue.shift();
@@ -404,7 +316,6 @@ export class WebSocketService {
 				try {
 					this.send(item.message);
 				} catch (error) {
-					// Re-queue if failed
 					this.messageQueue.unshift(item);
 					console.error('[WebSocket] Failed to process queued message:', error);
 					break;
@@ -413,9 +324,6 @@ export class WebSocketService {
 		}
 	}
 
-	/**
-	 * Start keep-alive ping interval
-	 */
 	private startKeepAlive(): void {
 		if (this.pingInterval) {
 			clearInterval(this.pingInterval);
@@ -429,9 +337,6 @@ export class WebSocketService {
 		}, this.config.pingInterval);
 	}
 
-	/**
-	 * Handle connection error and cleanup
-	 */
 	private handleConnectionError(error: any): void {
 		const wsError = error instanceof WebSocketError
 			? error
@@ -449,9 +354,6 @@ export class WebSocketService {
 		this.emit('onDisconnect', wsError.message);
 	}
 
-	/**
-	 * Create stream buffer for incoming streamed response
-	 */
 	private createStreamBuffer(sessionId: string, messageId: string): void {
 		this.streamBuffers.set(messageId, {
 			sessionId,
@@ -461,7 +363,6 @@ export class WebSocketService {
 			isComplete: false,
 		});
 
-		// Set timeout for stream completion
 		const timeout = setTimeout(() => {
 			console.error(`[WebSocket] Stream timeout for message ${messageId}`);
 			this.clearStreamBuffer(messageId);
@@ -470,17 +371,11 @@ export class WebSocketService {
 		this.streamTimeouts.set(messageId, timeout);
 	}
 
-	/**
-	 * Clear stream buffer after stream_end
-	 */
 	private clearStreamBuffer(messageId: string): void {
 		this.streamBuffers.delete(messageId);
 		this.clearStreamTimeout(messageId);
 	}
 
-	/**
-	 * Clear stream timeout
-	 */
 	private clearStreamTimeout(messageId: string): void {
 		const timeout = this.streamTimeouts.get(messageId);
 		if (timeout) {
@@ -489,14 +384,10 @@ export class WebSocketService {
 		}
 	}
 
-	/**
-	 * Update connection context
-	 */
 	private updateContext(updates: Partial<WebSocketConnectionContext>): void {
 		if (this.context) {
 			this.context = { ...this.context, ...updates };
 		} else {
-			// Initialize context if not exists
 			this.context = {
 				sessionId: updates.sessionId || '',
 				state: updates.state || 'DISCONNECTED',
@@ -509,25 +400,14 @@ export class WebSocketService {
 		}
 	}
 
-	/**
-	 * Register event listener
-	 */
-	public on(
-		event: keyof WebSocketEventListeners,
-		callback: Function
-	): () => void {
+	public on(event: keyof WebSocketEventListeners, callback: Function): () => void {
 		if (!this.eventListeners.has(event)) {
 			this.eventListeners.set(event, []);
 		}
 		this.eventListeners.get(event)!.push(callback);
-
-		// Return unsubscribe function
 		return () => this.off(event, callback);
 	}
 
-	/**
-	 * Unregister event listener
-	 */
 	public off(event: keyof WebSocketEventListeners, callback?: Function): void {
 		if (!callback) {
 			this.eventListeners.delete(event);
@@ -542,9 +422,6 @@ export class WebSocketService {
 		}
 	}
 
-	/**
-	 * Emit event to all listeners
-	 */
 	private emit(event: keyof WebSocketEventListeners, ...args: any[]): void {
 		const listeners = this.eventListeners.get(event) || [];
 		listeners.forEach((callback) => {
@@ -556,9 +433,6 @@ export class WebSocketService {
 		});
 	}
 
-	/**
-	 * Check if connected and authenticated
-	 */
 	public isConnected(): boolean {
 		return (
 			this.ws !== null &&
@@ -567,24 +441,15 @@ export class WebSocketService {
 		);
 	}
 
-	/**
-	 * Get current connection context
-	 */
 	public getContext(): WebSocketConnectionContext | null {
 		return this.context ? { ...this.context } : null;
 	}
 
-	/**
-	 * Get message queue size
-	 */
 	public getQueueSize(): number {
 		return this.messageQueue.length;
 	}
 }
 
-// Export singleton getter
-export const getWebSocketService = (
-	config?: Partial<WebSocketConfig>
-): WebSocketService => {
+export const getWebSocketService = (config?: Partial<WebSocketConfig>): WebSocketService => {
 	return WebSocketService.getInstance(config);
 };

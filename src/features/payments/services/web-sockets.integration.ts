@@ -18,7 +18,7 @@ export class PaymentWebSocket {
     ) { }
 
     connect(): void {
-        const wsUrl = this.baseUrl.replace('http', 'ws') + `/ws/payments?token=${this.token}`;
+        const wsUrl = this.baseUrl + `/ws/payments?token=${this.token}`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {

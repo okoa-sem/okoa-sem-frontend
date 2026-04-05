@@ -62,14 +62,22 @@ export default function SubscriptionModal({
     onError: (error: any) => {
       console.error('Payment initiation failed:', error);
       const errorMsg = error?.response?.data?.message || error?.message || 'Payment initiation failed';
-      
-      // Check if error is "user already has active subscription"
-      if (error?.response?.status === 404 || errorMsg.includes('already')) {
+
+      // 404 means the backend rejected the request because the user already
+      // has an active subscription.  Treat it as a successful subscription
+      // rather than an error so the modal closes and grants access.
+      if (error?.response?.status === 404) {
+        console.log('✅ Backend returned 404 – user already has an active subscription, confirming success.');
+        confirmPaymentSuccess();
+        return;
+      }
+
+      if (errorMsg.toLowerCase().includes('already')) {
         setErrorMessage('You already have an active subscription. Please wait for it to expire before subscribing again.');
       } else {
         setErrorMessage(errorMsg);
       }
-      
+
       setStep('error');
     },
   });
@@ -93,7 +101,7 @@ export default function SubscriptionModal({
 
   const initializeWebSocket = (token: string, reference: string) => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8075/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'wss://localhost:8080';
       
       websocketRef.current = new PaymentWebSocket(
         baseUrl,
@@ -115,6 +123,10 @@ export default function SubscriptionModal({
     
     if (message.type === 'PAYMENT_SUCCESS' && message.reference === paymentReferenceRef.current) {
       console.log('🎉 Payment success confirmed via WebSocket!');
+      confirmPaymentSuccess();
+    } else if (message.type === 'PAYMENT_STATUS_UPDATE' && (message as any).success === true) {
+      // Payment was successful - confirm and start checking subscription
+      console.log('🎉 Payment status update received with success flag!');
       confirmPaymentSuccess();
     } else if (message.type === 'PAYMENT_FAILED' && message.reference === paymentReferenceRef.current) {
       console.log('❌ Payment failed via WebSocket');
@@ -167,25 +179,43 @@ export default function SubscriptionModal({
   };
 
   const startPaymentPolling = () => {
-    // Poll every 3 seconds for up to 5 minutes (100 polls)
+    // Poll every 3 seconds for up to 60 seconds (20 polls).
+    // After 10 polls (~30 s) also cross-check subscription history in case
+    // the check-access endpoint lags behind.
     let pollCount = 0;
-    const maxPolls = 100; // 5 minutes total
-    
-    console.log('🔄 Starting payment polling... will check 100 times (every 3s for 5 minutes)');
-    
-    pollingIntervalRef.current = setInterval(() => {
+    const maxPolls = 40; // Increased from 20 (now 120s timeout instead of 60s)
+
+    console.log('🔄 Starting payment polling... will check every 3 s for up to 120 s');
+
+    pollingIntervalRef.current = setInterval(async () => {
       pollCount++;
       console.log(`[Poll ${pollCount}/${maxPolls}] Checking subscription status...`);
       checkAccess();
-      
+
+      // Fallback: check subscription history at poll 10, 20, and 30
+      if (pollCount === 10 || pollCount === 20 || pollCount === 30) {
+        try {
+          const history = await PaymentService.getSubscriptionHistory();
+          const hasActive = history.some((s) => s.isActive && s.status === 'ACTIVE');
+          if (hasActive) {
+            console.log('✅ Active subscription found in history – confirming payment success');
+            confirmPaymentSuccess();
+            return;
+          }
+        } catch (e) {
+          console.warn('History fallback check failed:', e);
+        }
+      }
+
       if (pollCount >= maxPolls) {
-        // Stop polling after 5 minutes
         stopPolling();
-        console.log('❌ Payment polling timeout - no subscription detected after 5 minutes');
-        setErrorMessage('Payment verification timed out. Please refresh the page to check if payment was successful.');
+        console.log('❌ Payment polling timeout after 120 s');
+        setErrorMessage(
+          'Payment verification timed out. If money was deducted from your M-Pesa, please wait a moment and refresh the page.'
+        );
         setStep('error');
       }
-    }, 3000); // 3 second intervals instead of 2
+    }, 3000);
   };
 
   useEffect(() => {

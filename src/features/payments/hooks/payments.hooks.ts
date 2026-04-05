@@ -1,9 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-
 import PaymentService from '../services/paymentsService';
 
-
-// Query keys
 export const paymentQueryKeys = {
     all: ['payments'] as const,
     websocketStatus: () => [...paymentQueryKeys.all, 'websocket-status'] as const,
@@ -11,41 +8,59 @@ export const paymentQueryKeys = {
     chatAccess: () => [...paymentQueryKeys.all, 'chat-access'] as const,
 };
 
-// WebSocket Status Query
-export const useWebSocketStatus = () => {
+interface QueryOptions {
+    enabled?: boolean;
+    staleTime?: number;
+    refetchInterval?: number;
+}
+
+export const useWebSocketStatus = (options?: QueryOptions) => {
     return useQuery({
         queryKey: paymentQueryKeys.websocketStatus(),
         queryFn: () => PaymentService.checkWebSocketStatus(),
-        staleTime: 1000 * 30,
-        refetchInterval: 1000 * 60,
+        staleTime: options?.staleTime ?? 1000 * 30,
+        refetchInterval: options?.refetchInterval ?? 1000 * 60,
+        enabled: options?.enabled,
     });
 };
 
-// Subscription History Query
-export const useSubscriptionHistory = () => {
+export const useSubscriptionHistory = (options?: QueryOptions) => {
     return useQuery({
         queryKey: paymentQueryKeys.subscriptionHistory(),
         queryFn: () => PaymentService.getSubscriptionHistory(),
-        staleTime: 1000 * 30, // Reduced from 60s to 30s
+        staleTime: options?.staleTime ?? 1000 * 60 * 5,
+        gcTime: 1000 * 60 * 10,
+        enabled: options?.enabled,
     });
 };
 
-// Chat Access Query - with aggressive stale time for payment flow
-export const useChatAccess = (options?: { staleTime?: number; refetchInterval?: number }) => {
+export const useActiveSubscription = (options?: QueryOptions) => {
+    const { data: history = [], ...rest } = useSubscriptionHistory(options);
+    const activeSubscription = history.find(sub => sub.isActive || sub.status === 'ACTIVE');
+    
+    return {
+        ...rest,
+        activeSubscription,
+        isActive: !!activeSubscription,
+    };
+};
+
+export const useChatAccess = (options?: QueryOptions) => {
     return useQuery({
         queryKey: paymentQueryKeys.chatAccess(),
         queryFn: () => PaymentService.checkChatAccess(),
-        staleTime: options?.staleTime ?? 1000 * 10, // 10 seconds by default for payment flow
+        staleTime: options?.staleTime ?? 1000 * 60 * 5,
         refetchInterval: options?.refetchInterval,
+        gcTime: 1000 * 60 * 10,
+        enabled: options?.enabled,
     });
 };
 
-// Combined hooks export
-export const usePaymentQueries = () => {
+export const usePaymentQueries = (options?: QueryOptions) => {
     return {
-        websocketStatus: useWebSocketStatus(),
-        subscriptionHistory: useSubscriptionHistory(),
-        chatAccess: useChatAccess(),
+        websocketStatus: useWebSocketStatus(options),
+        subscriptionHistory: useSubscriptionHistory(options),
+        chatAccess: useChatAccess(options),
     };
 };
 
