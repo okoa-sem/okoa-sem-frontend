@@ -179,44 +179,38 @@ export default function SubscriptionModal({
   };
 
   const startPaymentPolling = () => {
-    // Poll every 3 seconds for up to 60 seconds (20 polls).
-    // After 10 polls (~30 s) also cross-check subscription history in case
-    // the check-access endpoint lags behind.
-    let pollCount = 0;
-    const maxPolls = 40; // Increased from 20 (now 120s timeout instead of 60s)
+  let pollCount = 0;
+  const maxPolls = 40;
 
-    console.log('🔄 Starting payment polling... will check every 3 s for up to 120 s');
+  pollingIntervalRef.current = setInterval(async () => {
+    pollCount++;
+    
+    // Force invalidate BEFORE checking so the query actually hits the network
+    queryClient.invalidateQueries({ queryKey: subscriptionKeys.access() });
+    queryClient.invalidateQueries({ queryKey: subscriptionKeys.history() });
+    
+    checkAccess();  // now triggers a fresh fetch, not cached false
 
-    pollingIntervalRef.current = setInterval(async () => {
-      pollCount++;
-      console.log(`[Poll ${pollCount}/${maxPolls}] Checking subscription status...`);
-      checkAccess();
-
-      // Fallback: check subscription history at poll 10, 20, and 30
-      if (pollCount === 10 || pollCount === 20 || pollCount === 30) {
-        try {
-          const history = await PaymentService.getSubscriptionHistory();
-          const hasActive = history.some((s) => s.isActive && s.status === 'ACTIVE');
-          if (hasActive) {
-            console.log('✅ Active subscription found in history – confirming payment success');
-            confirmPaymentSuccess();
-            return;
-          }
-        } catch (e) {
-          console.warn('History fallback check failed:', e);
+    if (pollCount === 10 || pollCount === 20 || pollCount === 30) {
+      try {
+        const history = await PaymentService.getSubscriptionHistory();
+        const hasActive = history.some((s) => s.isActive && s.status === 'ACTIVE');
+        if (hasActive) {
+          confirmPaymentSuccess();
+          return;
         }
+      } catch (e) {
+        console.warn('History fallback check failed:', e);
       }
+    }
 
-      if (pollCount >= maxPolls) {
-        stopPolling();
-        console.log('❌ Payment polling timeout after 120 s');
-        setErrorMessage(
-          'Payment verification timed out. If money was deducted from your M-Pesa, please wait a moment and refresh the page.'
-        );
-        setStep('error');
-      }
-    }, 3000);
-  };
+    if (pollCount >= maxPolls) {
+      stopPolling();
+      setErrorMessage('Payment verification timed out...');
+      setStep('error');
+    }
+  }, 3000);
+};
 
   useEffect(() => {
     // Cleanup on unmount

@@ -17,9 +17,12 @@ export class PaymentWebSocket {
         private onError?: (error: Event) => void
     ) { }
 
-    connect(): void {
-        const wsUrl = this.baseUrl + `/ws/payments?token=${this.token}`;
-        this.ws = new WebSocket(wsUrl);
+   connect(): void {
+ 
+  const wsUrl = `${this.baseUrl}/ws/payments?token=${this.token}`;
+  this.ws = new WebSocket(wsUrl);
+  
+
 
         this.ws.onopen = () => {
             console.log('WebSocket connected to payment notifications');
@@ -127,22 +130,20 @@ export const PaymentUtils = {
     /**
      * Determine subscription plan based on amount as per documentation
      */
-    getSubscriptionPlan(amount: number): 'DAILY' | 'WEEKLY' | 'MONTHLY' {
-        switch (amount) {
-            case 1:
-            case 10:
-                return 'DAILY';
-            case 80:
-                return 'WEEKLY';
-            case 250:
-                return 'MONTHLY';
-            default:
-                // For any other amount, use amount-based logic
-                if (amount <= 10) return 'DAILY';
-                if (amount <= 80) return 'WEEKLY';
-                return 'MONTHLY';
-        }
-    },
+   getSubscriptionPlan(amount: number): 'DAILY' | 'WEEKLY' | 'MONTHLY' {
+  switch (amount) {
+    case 10:
+      return 'DAILY';
+    case 80:
+      return 'WEEKLY';
+    case 250:
+      return 'MONTHLY';
+    default:
+      if (amount <= 10) return 'DAILY';
+      if (amount <= 80) return 'WEEKLY';
+      return 'MONTHLY';
+  }
+},
 
     /**
      * Parse M-Pesa result code description as per documentation

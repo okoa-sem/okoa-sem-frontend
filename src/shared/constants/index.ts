@@ -4,18 +4,18 @@ export const APP_DESCRIPTION = 'Access Past Papers & Study Resources'
 // Pricing
 export const PRICING = {
   DAILY: {
-    amount: 20,
-    duration: 1, // days
+    amount: 10,
+    duration: 1,
     name: 'Daily Plan',
   },
   WEEKLY: {
     amount: 80,
-    duration: 7, // days
+    duration: 7,
     name: 'Weekly Plan',
   },
   MONTHLY: {
-    amount: 130,
-    duration: 30, // days
+    amount: 250,
+    duration: 30,
     name: 'Monthly Plan',
   },
 } as const
@@ -201,14 +201,21 @@ export const SUBSCRIPTION_PLANS = {
     name: 'Daily Plan',
     duration: '24 hours access',
     durationLabel: '1 Day',
-    price: 20,
+    price: 10,
+  },
+  weekly: {
+    id: 'weekly' as const,
+    name: 'Weekly Plan',
+    duration: '7 days access',
+    durationLabel: '7 Days',
+    price: 80,
   },
   monthly: {
     id: 'monthly' as const,
     name: 'Monthly Plan',
     duration: '30 days access',
     durationLabel: '30 Days',
-    price: 130,
+    price: 250,
   },
 } as const
 
@@ -224,7 +231,7 @@ export const YOUTUBE_TOPICS = [
   { label: 'Algorithms', query: 'algorithms' },
 ] as const
 
-// YouTube Demo Videos 
+// YouTube Demo Videos
 export const generateDemoVideos = (query: string) => [
   { id: '1', title: `Introduction to ${query}`, channel: 'EduChannel', views: '1.2M', publishedAt: '2 weeks ago' },
   { id: '2', title: `${query} Tutorial for Beginners`, channel: 'Learn Tech', views: '856K', publishedAt: '1 month ago' },
@@ -384,7 +391,7 @@ export const generateDemoPastPapers = (school: string, schoolAbbr: string, year:
   const semesters: Array<'first' | 'second'> = ['first', 'second']
 
   const papers = []
-  
+
   for (const course of schoolCourses) {
     for (const semester of semesters) {
       for (const examType of examTypes) {
