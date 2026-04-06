@@ -18,49 +18,104 @@ import {
 } from '../types/websocket';
 
 const DEFAULT_CONFIG: WebSocketConfig = {
-	baseUrl: process.env.NEXT_PUBLIC_CHATBOT_WEBSOCKET_URL || '',
-	reconnectDelay: 1000, 
-	maxReconnectDelay: 30000, 
+	baseUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || '',
+	reconnectDelay: 1000,
+	maxReconnectDelay: 30000,
 	reconnectBackoffMultiplier: 1.5,
-	maxReconnectAttempts: 10,
-	pingInterval: 30000, 
-	messageTimeout: 30000, 
-	streamChunkTimeout: 60000, 
+	maxReconnectAttempts: 5,
+	pingInterval: 30000,
+	messageTimeout: 15000,
+	streamChunkTimeout: 60000,
 };
 
+function buildChatWsUrl(baseUrl: string, sessionId: string, token: string): string {
+	const cleanBase = baseUrl.replace(/\/$/, '');
+	const explicitPath = process.env.NEXT_PUBLIC_CHAT_WS_PATH;
+	if (explicitPath) {
+		return `${cleanBase}${explicitPath.replace(/\/$/, '')}/${sessionId}?token=${token}`;
+	}
+	return `${cleanBase}/ws/chat/${sessionId}?token=${token}`;
+}
+
+
+function extractChunkText(message: any): string {
+	
+	if (message.data && typeof message.data.content === 'string') {
+		return message.data.content;
+	}
+	// Fallbacks for other possible structures:
+	if (typeof message.chunk === 'string') return message.chunk;
+	if (message.chunk && typeof message.chunk.content === 'string') return message.chunk.content;
+	if (typeof message.content === 'string') return message.content;
+	if (typeof message.text === 'string') return message.text;
+	if (typeof message.message === 'string') return message.message;
+	if (message.data && typeof message.data.text === 'string') return message.data.text;
+
+	console.warn('[WebSocket] Could not extract text from chunk. Raw:', JSON.stringify(message));
+	return '';
+}
+
 export class WebSocketService {
-	private static instance: WebSocketService;
+	private static instances: Map<string, WebSocketService> = new Map();
+
 	private ws: WebSocket | null = null;
 	private config: WebSocketConfig;
 	private context: WebSocketConnectionContext | null = null;
 	private messageQueue: MessageQueueItem[] = [];
 	private reconnectAttempts = 0;
 	private pingInterval: NodeJS.Timeout | null = null;
-	private streamBuffers: Map<string, StreamBuffer> = new Map(); 
-	private streamTimeouts: Map<string, NodeJS.Timeout> = new Map(); 
+	private streamTimeouts: Map<string, NodeJS.Timeout> = new Map();
 	private eventListeners: Map<keyof WebSocketEventListeners, Function[]> = new Map();
 	private accessToken: string | null = null;
+	private currentSessionId: string = '';
 
 	private constructor(config: Partial<WebSocketConfig> = {}) {
 		this.config = { ...DEFAULT_CONFIG, ...config };
 	}
 
-	public static getInstance(config?: Partial<WebSocketConfig>): WebSocketService {
-		if (!WebSocketService.instance) {
-			WebSocketService.instance = new WebSocketService(config);
+	public static getForSession(sessionId: string, config?: Partial<WebSocketConfig>): WebSocketService {
+		if (!WebSocketService.instances.has(sessionId)) {
+			WebSocketService.instances.set(sessionId, new WebSocketService(config));
 		}
-		return WebSocketService.instance;
+		return WebSocketService.instances.get(sessionId)!;
+	}
+
+	public static destroySession(sessionId: string): void {
+		const instance = WebSocketService.instances.get(sessionId);
+		if (instance) {
+			instance.destroy();
+			WebSocketService.instances.delete(sessionId);
+		}
+	}
+
+	public static getInstance(config?: Partial<WebSocketConfig>): WebSocketService {
+		return WebSocketService.getForSession('__default__', config);
 	}
 
 	public async connect(sessionId: string, accessToken: string): Promise<void> {
-        // FIX: Check if already OPEN *or* CONNECTING to prevent thrashing
-		if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-			console.warn('[WebSocket] Already connected or connecting');
-			return;
+		this.currentSessionId = sessionId;
+		this.accessToken = accessToken;
+
+		if (this.ws) {
+			const state = this.ws.readyState;
+			if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) {
+				console.warn('[WebSocket] Already connected/connecting:', sessionId);
+				return;
+			}
+			if (state === WebSocket.CLOSING) {
+				await new Promise<void>((resolve) => {
+					const check = setInterval(() => {
+						if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+							clearInterval(check);
+							resolve();
+						}
+					}, 100);
+					setTimeout(() => { clearInterval(check); resolve(); }, 3000);
+				});
+			}
 		}
 
 		try {
-			this.accessToken = accessToken;
 			this.updateContext({
 				sessionId,
 				state: 'CONNECTING',
@@ -70,43 +125,36 @@ export class WebSocketService {
 				attemptCount: this.reconnectAttempts,
 			});
 
-			const url = `${this.config.baseUrl}/chat/${sessionId}?token=${accessToken}`;
-			console.log('[WebSocket] Connecting to:', url);
+			const url = buildChatWsUrl(this.config.baseUrl, sessionId, accessToken);
+			console.log('[WebSocket] Connecting to:', url.split('?')[0]);
 
 			return new Promise((resolve, reject) => {
 				try {
 					this.ws = new WebSocket(url);
-
-					this.ws.onopen = () => this.handleOpen();
 					this.ws.onmessage = (event) => this.handleMessage(event);
-					this.ws.onerror = (event) => this.handleError(event);
-					this.ws.onclose = () => this.handleClose();
+					this.ws.onerror = () => {
+						console.error('[WebSocket] Connection error for session:', sessionId);
+						this.updateContext({ state: 'ERROR', errorMessage: 'Connection error' });
+					};
+					this.ws.onclose = (event) => this.handleClose(event);
 
 					const connectTimeout = setTimeout(() => {
-						reject(
-							new WebSocketError(
-								WebSocketErrorType.CONNECTION_FAILED,
-								'WebSocket connection timeout'
-							)
-						);
+						console.error('[WebSocket] Connection timed out');
+						if (this.ws) {
+							this.ws.onclose = null;
+							this.ws.close();
+							this.ws = null;
+						}
+						reject(new WebSocketError(WebSocketErrorType.CONNECTION_FAILED, 'Connection timeout'));
 					}, this.config.messageTimeout);
 
-					const originalOnOpen = this.ws.onopen;
-					const wsInstance = this.ws;
-					this.ws.onopen = (event: Event) => {
+					this.ws.onopen = () => {
 						clearTimeout(connectTimeout);
-						if (originalOnOpen) {
-							originalOnOpen.call(wsInstance, event);
-						}
+						this.handleOpen();
 						resolve();
 					};
 				} catch (error) {
-					reject(
-						new WebSocketError(
-							WebSocketErrorType.CONNECTION_FAILED,
-							`Connection failed: ${error}`
-						)
-					);
+					reject(new WebSocketError(WebSocketErrorType.CONNECTION_FAILED, `Connection failed: ${error}`));
 				}
 			});
 		} catch (error) {
@@ -116,15 +164,14 @@ export class WebSocketService {
 	}
 
 	public disconnect(): void {
-		console.log('[WebSocket] Disconnecting...');
-		if (this.pingInterval) {
-			clearInterval(this.pingInterval);
-			this.pingInterval = null;
-		}
-		this.streamTimeouts.forEach((timeout) => clearTimeout(timeout));
+		this.reconnectAttempts = this.config.maxReconnectAttempts;
+		this.stopKeepAlive();
+		this.streamTimeouts.forEach(clearTimeout);
 		this.streamTimeouts.clear();
 
 		if (this.ws) {
+			this.ws.onclose = null;
+			this.ws.onerror = null;
 			this.ws.close(1000, 'Client disconnecting');
 			this.ws = null;
 		}
@@ -133,65 +180,53 @@ export class WebSocketService {
 		this.emit('onDisconnect', 'User initiated disconnect');
 	}
 
+	private destroy(): void {
+		this.reconnectAttempts = this.config.maxReconnectAttempts;
+		this.stopKeepAlive();
+		this.eventListeners.clear();
+		this.messageQueue = [];
+		if (this.ws) {
+			this.ws.onopen = null;
+			this.ws.onclose = null;
+			this.ws.onerror = null;
+			this.ws.onmessage = null;
+			try { this.ws.close(); } catch {}
+			this.ws = null;
+		}
+	}
+
 	public async sendMessage(content: string): Promise<void> {
-		const message = { type: 'message' as const, content };
-
 		if (!this.isConnected()) {
-			console.warn('[WebSocket] Not connected, queueing message');
-			this.messageQueue.push({
-				message,
-				timestamp: Date.now(),
-				retries: 0,
-			});
-			return;
+			throw new WebSocketError(WebSocketErrorType.MESSAGE_SEND_FAILED, 'WebSocket not connected');
 		}
-
 		if (!this.context?.hasValidSubscription) {
-			throw new WebSocketError(
-				WebSocketErrorType.SUBSCRIPTION_INVALID,
-				'No valid subscription'
-			);
+			throw new WebSocketError(WebSocketErrorType.SUBSCRIPTION_INVALID, 'No valid subscription');
 		}
-
-		this.send(message);
+		this.send({ type: 'message', content });
 	}
 
 	private sendPing(): void {
 		if (this.isConnected()) {
-			this.send({ type: 'ping' });
+			try { this.send({ type: 'ping' }); } catch {}
 		}
 	}
 
 	private send(message: ClientMessage): void {
 		if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-			throw new WebSocketError(
-				WebSocketErrorType.MESSAGE_SEND_FAILED,
-				'WebSocket is not open'
-			);
+			throw new WebSocketError(WebSocketErrorType.MESSAGE_SEND_FAILED, 'WebSocket not open');
 		}
-
-		try {
-			this.ws.send(JSON.stringify(message));
-			this.updateContext({
-				lastMessageTime: Date.now(),
-			});
-			console.log('[WebSocket] Message sent:', message);
-		} catch (error) {
-			throw new WebSocketError(
-				WebSocketErrorType.MESSAGE_SEND_FAILED,
-				`Failed to send message: ${error}`
-			);
-		}
+		this.ws.send(JSON.stringify(message));
+		this.updateContext({ lastMessageTime: Date.now() });
 	}
 
 	private handleOpen(): void {
-		console.log('[WebSocket] Connected');
+		console.log('[WebSocket] ✅ Connected successfully for session:', this.currentSessionId);
 		this.reconnectAttempts = 0;
 		this.updateContext({
-			state: 'AUTHENTICATING',
+			state: 'AUTHENTICATED',
 			isConnected: true,
+			hasValidSubscription: true,
 		});
-
 		this.startKeepAlive();
 		this.processMessageQueue();
 		this.emit('onConnect', this.context!);
@@ -199,112 +234,107 @@ export class WebSocketService {
 
 	private handleMessage(event: MessageEvent): void {
 		try {
-			const message: ServerMessage = JSON.parse(event.data);
-			
-			this.updateContext({
-				lastMessageTime: Date.now(),
-			});
+			const message = JSON.parse(event.data);
+			this.updateContext({ lastMessageTime: Date.now() });
 
 			switch (message.type) {
-				case 'message':
-					this.handleServerMessage(message as ServerMessagePayload);
+				case 'user_message':
+				case 'message': {
+					console.log('[WebSocket] Full message received');
+					const normalized: ServerMessagePayload = {
+						type: 'message',
+						sessionId: message.sessionId || this.currentSessionId,
+						userMessage: message.userMessage || message.user_message || null,
+						aiResponse: message.aiResponse || message.ai_response || message.response || null,
+						processingTime: message.processingTime || message.processing_time || '',
+					};
+					this.emit('onMessage', normalized);
 					break;
-				case 'stream':
-					this.handleStreamChunk(message as StreamPayload);
+				}
+
+				case 'chunk':
+				case 'stream': {
+					const chunkText = extractChunkText(message);
+					if (chunkText) {
+						const streamPayload: StreamPayload = {
+							type: 'stream',
+							chunk: chunkText,
+						};
+						this.emit('onStream', streamPayload);
+					}
 					break;
-				case 'stream_end':
-					this.handleStreamEnd(message as StreamEndPayload);
+				}
+
+				case 'complete':
+				case 'stream_end': {
+					console.log('[WebSocket] Stream complete');
+					const messageId = message.messageId || message.message_id
+						|| (message.data && message.data.messageId)
+						|| '';
+					const endPayload: StreamEndPayload = {
+						type: 'stream_end',
+						messageId,
+					};
+					this.emit('onStreamEnd', endPayload);
+					if (messageId) this.clearStreamTimeout(messageId);
 					break;
-				case 'error':
-					this.handleErrorMessage(message as ErrorPayload);
+				}
+
+				case 'error': {
+					console.error('[WebSocket] Server error:', message.message);
+					this.emit('onError', message as ErrorPayload);
 					break;
-				case 'subscription_error':
-					this.handleSubscriptionError(message as SubscriptionErrorPayload);
+				}
+
+				case 'subscription_error': {
+					console.error('[WebSocket] Subscription error:', message.code);
+					this.updateContext({ state: 'SUBSCRIPTION_ERROR', hasValidSubscription: false });
+					this.emit('onSubscriptionError', message as SubscriptionErrorPayload);
 					break;
-				case 'pong':
-					this.handlePong(message as PongPayload);
+				}
+
+				case 'pong': {
+					this.emit('onPong');
 					break;
+				}
+
+				default: {
+					console.warn('[WebSocket] Unhandled message type:', message.type, JSON.stringify(message));
+					break;
+				}
 			}
 		} catch (error) {
 			console.error('[WebSocket] Failed to parse message:', error);
 		}
 	}
 
-	private handleServerMessage(message: ServerMessagePayload): void {
-		this.emit('onMessage', message);
-		this.clearStreamBuffer(message.aiResponse.messageId);
-	}
-
-	private handleStreamChunk(payload: StreamPayload): void {
-		this.emit('onStream', payload);
-	}
-
-	private handleStreamEnd(payload: StreamEndPayload): void {
-		this.emit('onStreamEnd', payload);
-		this.clearStreamTimeout(payload.messageId);
-	}
-
-	private handleErrorMessage(payload: ErrorPayload): void {
-		console.error('[WebSocket] Error from server:', payload.message);
-		this.emit('onError', payload);
-	}
-
-	private handleSubscriptionError(payload: SubscriptionErrorPayload): void {
-		console.error('[WebSocket] Subscription error:', payload);
-		this.updateContext({
-			state: 'SUBSCRIPTION_ERROR',
-			hasValidSubscription: false,
-		});
-		this.emit('onSubscriptionError', payload);
-	}
-
-	private handlePong(payload: PongPayload): void {
-		this.emit('onPong');
-	}
-
-	private handleError(event: Event): void {
-		console.error('[WebSocket] Error:', event);
-		const error = new WebSocketError(
-			WebSocketErrorType.NETWORK_ERROR,
-			'WebSocket error occurred'
-		);
-		this.updateContext({ state: 'ERROR', errorMessage: error.message });
-	}
-
-	private handleClose(): void {
-		console.log('[WebSocket] Connection closed');
+	private handleClose(event: CloseEvent): void {
+		console.log(`[WebSocket] Closed. Code: ${event.code}, Clean: ${event.wasClean}`);
 		this.ws = null;
+		this.stopKeepAlive();
 		this.updateContext({ state: 'DISCONNECTED', isConnected: false });
+		this.emit('onDisconnect', `Code ${event.code}`);
 
-		if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
+		if (event.code !== 1000 && this.reconnectAttempts < this.config.maxReconnectAttempts) {
 			this.scheduleReconnect();
-		} else {
-			console.error('[WebSocket] Max reconnection attempts reached');
+		} else if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
+			console.error('[WebSocket] Max reconnect attempts reached');
+			this.emit('onError', { type: 'error', message: 'Failed to connect after multiple attempts' });
 		}
 	}
 
 	private scheduleReconnect(): void {
 		const delay = Math.min(
-			this.config.reconnectDelay *
-				Math.pow(this.config.reconnectBackoffMultiplier, this.reconnectAttempts),
+			this.config.reconnectDelay * Math.pow(this.config.reconnectBackoffMultiplier, this.reconnectAttempts),
 			this.config.maxReconnectDelay
 		);
-
 		this.reconnectAttempts++;
-		console.log(
-			`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
-		);
-
-		this.updateContext({
-			state: 'RECONNECTING',
-			attemptCount: this.reconnectAttempts,
-		});
+		console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.config.maxReconnectAttempts})`);
+		this.updateContext({ state: 'RECONNECTING', attemptCount: this.reconnectAttempts });
 
 		setTimeout(() => {
-			if (this.context && this.accessToken) {
-				this.connect(this.context.sessionId, this.accessToken).catch((error) => {
-					console.error('[WebSocket] Reconnection failed:', error);
-				});
+			if (this.currentSessionId && this.accessToken) {
+				this.connect(this.currentSessionId, this.accessToken).catch(console.error);
 			}
 		}, delay);
 	}
@@ -313,75 +343,33 @@ export class WebSocketService {
 		while (this.messageQueue.length > 0 && this.isConnected()) {
 			const item = this.messageQueue.shift();
 			if (item) {
-				try {
-					this.send(item.message);
-				} catch (error) {
-					this.messageQueue.unshift(item);
-					console.error('[WebSocket] Failed to process queued message:', error);
-					break;
-				}
+				try { this.send(item.message); }
+				catch { this.messageQueue.unshift(item); break; }
 			}
 		}
 	}
 
 	private startKeepAlive(): void {
+		this.stopKeepAlive();
+		this.pingInterval = setInterval(() => this.sendPing(), this.config.pingInterval);
+	}
+
+	private stopKeepAlive(): void {
 		if (this.pingInterval) {
 			clearInterval(this.pingInterval);
+			this.pingInterval = null;
 		}
-		this.pingInterval = setInterval(() => {
-			try {
-				this.sendPing();
-			} catch (error) {
-				console.warn('[WebSocket] Failed to send ping:', error);
-			}
-		}, this.config.pingInterval);
 	}
 
 	private handleConnectionError(error: any): void {
-		const wsError = error instanceof WebSocketError
-			? error
-			: new WebSocketError(
-					WebSocketErrorType.CONNECTION_FAILED,
-					error?.message || 'Connection failed'
-			  );
-
-		this.updateContext({
-			state: 'ERROR',
-			isConnected: false,
-			errorMessage: wsError.message,
-		});
-
-		this.emit('onDisconnect', wsError.message);
-	}
-
-	private createStreamBuffer(sessionId: string, messageId: string): void {
-		this.streamBuffers.set(messageId, {
-			sessionId,
-			messageId,
-			chunks: [],
-			startTime: Date.now(),
-			isComplete: false,
-		});
-
-		const timeout = setTimeout(() => {
-			console.error(`[WebSocket] Stream timeout for message ${messageId}`);
-			this.clearStreamBuffer(messageId);
-		}, this.config.streamChunkTimeout);
-
-		this.streamTimeouts.set(messageId, timeout);
-	}
-
-	private clearStreamBuffer(messageId: string): void {
-		this.streamBuffers.delete(messageId);
-		this.clearStreamTimeout(messageId);
+		const msg = error instanceof Error ? error.message : 'Connection failed';
+		this.updateContext({ state: 'ERROR', isConnected: false, errorMessage: msg });
+		this.emit('onDisconnect', msg);
 	}
 
 	private clearStreamTimeout(messageId: string): void {
-		const timeout = this.streamTimeouts.get(messageId);
-		if (timeout) {
-			clearTimeout(timeout);
-			this.streamTimeouts.delete(messageId);
-		}
+		const t = this.streamTimeouts.get(messageId);
+		if (t) { clearTimeout(t); this.streamTimeouts.delete(messageId); }
 	}
 
 	private updateContext(updates: Partial<WebSocketConnectionContext>): void {
@@ -401,53 +389,35 @@ export class WebSocketService {
 	}
 
 	public on(event: keyof WebSocketEventListeners, callback: Function): () => void {
-		if (!this.eventListeners.has(event)) {
-			this.eventListeners.set(event, []);
-		}
+		if (!this.eventListeners.has(event)) this.eventListeners.set(event, []);
 		this.eventListeners.get(event)!.push(callback);
 		return () => this.off(event, callback);
 	}
 
 	public off(event: keyof WebSocketEventListeners, callback?: Function): void {
-		if (!callback) {
-			this.eventListeners.delete(event);
-		} else {
-			const listeners = this.eventListeners.get(event);
-			if (listeners) {
-				const index = listeners.indexOf(callback);
-				if (index > -1) {
-					listeners.splice(index, 1);
-				}
-			}
+		if (!callback) { this.eventListeners.delete(event); return; }
+		const listeners = this.eventListeners.get(event);
+		if (listeners) {
+			const idx = listeners.indexOf(callback);
+			if (idx > -1) listeners.splice(idx, 1);
 		}
 	}
 
 	private emit(event: keyof WebSocketEventListeners, ...args: any[]): void {
-		const listeners = this.eventListeners.get(event) || [];
-		listeners.forEach((callback) => {
-			try {
-				callback(...args);
-			} catch (error) {
-				console.error(`[WebSocket] Error in ${event} listener:`, error);
-			}
+		(this.eventListeners.get(event) || []).forEach((cb) => {
+			try { cb(...args); } catch (e) { console.error(`[WebSocket] Listener error (${event}):`, e); }
 		});
 	}
 
 	public isConnected(): boolean {
-		return (
-			this.ws !== null &&
-			this.ws.readyState === WebSocket.OPEN &&
-			this.context?.isConnected === true
-		);
+		return this.ws !== null && this.ws.readyState === WebSocket.OPEN && this.context?.isConnected === true;
 	}
 
 	public getContext(): WebSocketConnectionContext | null {
 		return this.context ? { ...this.context } : null;
 	}
 
-	public getQueueSize(): number {
-		return this.messageQueue.length;
-	}
+	public getQueueSize(): number { return this.messageQueue.length; }
 }
 
 export const getWebSocketService = (config?: Partial<WebSocketConfig>): WebSocketService => {

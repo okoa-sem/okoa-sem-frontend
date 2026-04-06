@@ -1,12 +1,5 @@
-/**
- * useWebSocket Hook
- * Manages WebSocket connection lifecycle for React components
- * Handles connection, disconnection, messaging, and event subscriptions
- * Integrates with Redux for state management
- */
-
-import { useEffect, useCallback, useRef } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useEffect, useRef, useCallback } from 'react';
+import { useDispatch } from 'react-redux';
 import { useAppSelector } from '@/store/hooks';
 import {
 	initializeSession,
@@ -19,21 +12,14 @@ import {
 	completeStream,
 	resetStreamingContent,
 	setLastServerMessage,
-	removeSession,
 	selectSessionConnectionState,
 	selectSessionIsConnected,
 	selectSessionHasValidSubscription,
-	selectStreamingContent,
-	selectIsStreaming,
 	selectSessionError,
 } from '../../slices/websocket.slice';
-import {
-	getWebSocketService,
-	WebSocketService,
-} from '../../services/websocketService';
+import { WebSocketService } from '../../services/websocketService';
 import {
 	UseWebSocketReturn,
-	WebSocketConnectionState,
 	ServerMessagePayload,
 	SubscriptionErrorPayload,
 	ErrorPayload,
@@ -41,13 +27,6 @@ import {
 	StreamEndPayload,
 } from '../../types/websocket';
 
-/**
- * Hook to manage WebSocket connection for a chat session
- * @param sessionId - Chat session ID (null to disable connection)
- * @param accessToken - JWT access token for authentication
- * @param onMessageReceived - Callback when complete message received
- * @param onError - Callback when error occurs
- */
 export const useWebSocket = (
 	sessionId: string | null,
 	accessToken: string | null,
@@ -55,9 +34,25 @@ export const useWebSocket = (
 	onError?: (error: string) => void
 ): UseWebSocketReturn => {
 	const dispatch = useDispatch();
-	const wsServiceRef = useRef<WebSocketService | null>(null);
 
-	// Redux selectors for this session
+	// ─── Refs: never cause re-renders ────────────────────────────────────────
+
+	// Track which session we have already set up — prevents duplicate connects
+	const connectedSessionRef = useRef<string | null>(null);
+	// Track whether listeners have been registered for the current session
+	const listenersRegisteredRef = useRef<string | null>(null);
+
+	// Store callbacks in refs so listeners never need to be re-registered
+	
+	const onMessageReceivedRef = useRef(onMessageReceived);
+	const onErrorRef = useRef(onError);
+	useEffect(() => { onMessageReceivedRef.current = onMessageReceived; }, [onMessageReceived]);
+	useEffect(() => { onErrorRef.current = onError; }, [onError]);
+
+	
+	const sessionIdRef = useRef(sessionId);
+	useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+
 	const connectionState = useAppSelector((state) =>
 		selectSessionConnectionState(state, sessionId || '')
 	);
@@ -71,223 +66,165 @@ export const useWebSocket = (
 		selectSessionError(state, sessionId || '')
 	);
 
-	// Get WebSocket service singleton
-	useEffect(() => {
-		wsServiceRef.current = getWebSocketService();
-	}, []);
+	// ─── Register listeners (once per session) ────────────────────────────────
 
-	/**
-	 * Connect to WebSocket
-	 */
+	const registerListeners = useCallback((sid: string) => {
+		// GUARD: only register once per session
+		if (listenersRegisteredRef.current === sid) return;
+		listenersRegisteredRef.current = sid;
+
+		const wsService = WebSocketService.getForSession(sid);
+
+		wsService.on('onConnect', () => {
+			console.log('[useWebSocket] ✅ Connected:', sid);
+			dispatch(setConnectionState({ sessionId: sid, state: 'AUTHENTICATED' }));
+			dispatch(setSubscriptionStatus({ sessionId: sid, isValid: true }));
+			dispatch(clearError(sid));
+		});
+
+		wsService.on('onDisconnect', (reason?: string) => {
+			dispatch(setConnectionState({ sessionId: sid, state: 'DISCONNECTED' }));
+			if (reason && reason !== 'User initiated disconnect') {
+				dispatch(setError({ sessionId: sid, message: reason }));
+			}
+		});
+
+		wsService.on('onMessage', (message: ServerMessagePayload) => {
+			dispatch(setLastServerMessage({ sessionId: sid, message }));
+			dispatch(completeStream(sid));
+			onMessageReceivedRef.current?.(message);
+		});
+
+		wsService.on('onStream', (payload: StreamPayload) => {
+			// Only dispatch non-empty strings — objects slipping through
+			
+			if (typeof payload.chunk === 'string' && payload.chunk.length > 0) {
+				dispatch(addStreamChunk({ sessionId: sid, chunk: payload.chunk }));
+			}
+		});
+
+		wsService.on('onStreamEnd', (_payload: StreamEndPayload) => {
+			dispatch(completeStream(sid));
+		});
+
+		wsService.on('onError', (payload: ErrorPayload) => {
+			console.error('[useWebSocket] Error:', payload.message);
+			dispatch(setError({ sessionId: sid, message: payload.message }));
+			onErrorRef.current?.(payload.message);
+		});
+
+		wsService.on('onSubscriptionError', (payload: SubscriptionErrorPayload) => {
+			dispatch(setConnectionState({ sessionId: sid, state: 'SUBSCRIPTION_ERROR' }));
+			dispatch(setSubscriptionStatus({ sessionId: sid, isValid: false }));
+			dispatch(setError({ sessionId: sid, message: payload.message }));
+			onErrorRef.current?.(payload.message);
+		});
+
+		wsService.on('onPong', () => {
+			dispatch(updateLastMessageTime({ sessionId: sid, timestamp: Date.now() }));
+		});
+	}, [dispatch]); // dispatch is stable — this callback is created once
+
+	// ─── Connect ──────────────────────────────────────────────────────────────
+
 	const connect = useCallback(async () => {
-		if (!sessionId || !accessToken) {
-			console.warn('[useWebSocket] Missing sessionId or accessToken');
-			return;
-		}
+		const sid = sessionIdRef.current;
+		if (!sid || !accessToken) return;
 
-		if (isConnected) {
-			console.warn('[useWebSocket] Already connected');
-			return;
+		
+		if (connectedSessionRef.current === sid) return;
+
+		// Clean up previous session if switching
+		if (connectedSessionRef.current && connectedSessionRef.current !== sid) {
+			WebSocketService.destroySession(connectedSessionRef.current);
+			connectedSessionRef.current = null;
+			listenersRegisteredRef.current = null;
 		}
 
 		try {
-			// Initialize session state in Redux
-			dispatch(initializeSession(sessionId));
-			dispatch(setConnectionState({ sessionId, state: 'CONNECTING' }));
+			dispatch(initializeSession(sid));
+			dispatch(setConnectionState({ sessionId: sid, state: 'CONNECTING' }));
 
-			// Connect service
-			const wsService = wsServiceRef.current;
-			if (!wsService) {
-				throw new Error('WebSocket service not initialized');
-			}
+			// Register listeners BEFORE connecting so onConnect is never missed
+			registerListeners(sid);
 
-			await wsService.connect(sessionId, accessToken);
+			// Mark as connected before awaiting to block concurrent calls
+			connectedSessionRef.current = sid;
 
-			// Setup event listeners
-			setupEventListeners(wsService, sessionId);
-
-			dispatch(setConnectionState({ sessionId, state: 'AUTHENTICATED' }));
-			dispatch(setSubscriptionStatus({ sessionId, isValid: true }));
+			await WebSocketService.getForSession(sid).connect(sid, accessToken);
 		} catch (error) {
-			const errorMsg =
-				error instanceof Error ? error.message : 'Connection failed';
-			dispatch(setConnectionState({ sessionId, state: 'ERROR' }));
-			dispatch(setError({ sessionId, message: errorMsg }));
-			onError?.(errorMsg);
+			const errorMsg = error instanceof Error ? error.message : 'Connection failed';
+			console.error('[useWebSocket] connect() failed:', errorMsg);
+			connectedSessionRef.current = null;
+			listenersRegisteredRef.current = null;
+			dispatch(setConnectionState({ sessionId: sid, state: 'ERROR' }));
+			dispatch(setError({ sessionId: sid, message: errorMsg }));
+			onErrorRef.current?.(errorMsg);
 		}
-	}, [sessionId, accessToken, isConnected, dispatch, onError]);
+	}, [accessToken, dispatch, registerListeners]);
+	
+	useEffect(() => {
+		if (sessionId && accessToken) {
+			connect();
+		}
+	
+	}, [sessionId, accessToken]);
 
-	/**
-	 * Setup event listeners on WebSocket service
-	 */
-	const setupEventListeners = useCallback(
-		(wsService: WebSocketService, sid: string) => {
-			// Connection established
-			wsService.on('onConnect', () => {
-				console.log('[useWebSocket] Connected');
-				dispatch(setConnectionState({ sessionId: sid, state: 'CONNECTED' }));
-				dispatch(clearError(sid));
-			});
+	// ─── Disconnect ───────────────────────────────────────────────────────────
 
-			// Disconnected
-			wsService.on('onDisconnect', (reason?: string) => {
-				console.log('[useWebSocket] Disconnected:', reason);
-				dispatch(setConnectionState({ sessionId: sid, state: 'DISCONNECTED' }));
-				if (reason) {
-					dispatch(setError({ sessionId: sid, message: reason }));
-				}
-			});
-
-			// Complete message received
-			wsService.on('onMessage', (message: ServerMessagePayload) => {
-				console.log('[useWebSocket] Message received:', message);
-				dispatch(setLastServerMessage({ sessionId: sid, message }));
-				dispatch(resetStreamingContent(sid));
-				dispatch(completeStream(sid));
-				onMessageReceived?.(message);
-			});
-
-			// Stream chunk
-			wsService.on('onStream', (payload: StreamPayload) => {
-				console.log('[useWebSocket] Stream chunk:', payload.chunk.length, 'chars');
-				dispatch(addStreamChunk({ sessionId: sid, chunk: payload.chunk }));
-			});
-
-			// Stream end
-			wsService.on('onStreamEnd', (payload: StreamEndPayload) => {
-				console.log('[useWebSocket] Stream ended:', payload.messageId);
-				dispatch(completeStream(sid));
-			});
-
-			// Error
-			wsService.on('onError', (payload: ErrorPayload) => {
-				console.error('[useWebSocket] Error:', payload.message);
-				dispatch(setError({ sessionId: sid, message: payload.message }));
-				onError?.(payload.message);
-			});
-
-			// Subscription error
-			wsService.on(
-				'onSubscriptionError',
-				(payload: SubscriptionErrorPayload) => {
-					console.error(
-						'[useWebSocket] Subscription error:',
-						payload.message
-					);
-					dispatch(
-						setConnectionState({
-							sessionId: sid,
-							state: 'SUBSCRIPTION_ERROR',
-						})
-					);
-					dispatch(
-						setSubscriptionStatus({ sessionId: sid, isValid: false })
-					);
-					dispatch(setError({ sessionId: sid, message: payload.message }));
-					onError?.(payload.message);
-				}
-			);
-
-			// Pong (keep-alive response)
-			wsService.on('onPong', () => {
-				console.log('[useWebSocket] Pong received');
-				dispatch(updateLastMessageTime({ sessionId: sid, timestamp: Date.now() }));
-			});
-		},
-		[dispatch, onMessageReceived, onError]
-	);
-
-	/**
-	 * Disconnect from WebSocket
-	 */
 	const disconnect = useCallback(() => {
-		const wsService = wsServiceRef.current;
-		if (wsService && sessionId) {
-			wsService.disconnect();
-			dispatch(setConnectionState({ sessionId, state: 'DISCONNECTED' }));
-			dispatch(resetStreamingContent(sessionId));
+		const sid = sessionIdRef.current;
+		if (sid) {
+			WebSocketService.destroySession(sid);
+			dispatch(setConnectionState({ sessionId: sid, state: 'DISCONNECTED' }));
+			dispatch(resetStreamingContent(sid));
+			connectedSessionRef.current = null;
+			listenersRegisteredRef.current = null;
 		}
-	}, [sessionId, dispatch]);
+	}, [dispatch]);
 
-	/**
-	 * Send message
-	 */
+	// ─── Send message ─────────────────────────────────────────────────────────
+
 	const sendMessage = useCallback(
 		async (content: string) => {
-			const wsService = wsServiceRef.current;
-			if (!wsService) {
-				throw new Error('WebSocket service not initialized');
-			}
+			const sid = sessionIdRef.current;
+			if (!sid) throw new Error('No session ID');
+			if (!isConnected) throw new Error('WebSocket not connected');
 
-			if (!isConnected) {
-				throw new Error('WebSocket not connected');
-			}
-
+			const wsService = WebSocketService.getForSession(sid);
 			try {
 				await wsService.sendMessage(content);
-				dispatch(updateLastMessageTime({ sessionId: sessionId!, timestamp: Date.now() }));
+				dispatch(updateLastMessageTime({ sessionId: sid, timestamp: Date.now() }));
 			} catch (error) {
-				const errorMsg =
-					error instanceof Error ? error.message : 'Failed to send message';
-				dispatch(setError({ sessionId: sessionId!, message: errorMsg }));
+				const errorMsg = error instanceof Error ? error.message : 'Failed to send';
+				dispatch(setError({ sessionId: sid, message: errorMsg }));
 				throw new Error(errorMsg);
 			}
 		},
-		[isConnected, dispatch, sessionId]
+		[isConnected, dispatch]
 	);
 
-	/**
-	 * Register event listener
-	 * Returns unsubscribe function
-	 */
-	const on = useCallback(
-		(event: any, callback: Function): (() => void) => {
-			const wsService = wsServiceRef.current;
-			if (!wsService) {
-				return () => {};
-			}
-			return wsService.on(event, callback);
-		},
-		[]
-	);
+	// ─── Listener helpers ─────────────────────────────────────────────────────
 
-	/**
-	 * Unregister event listener
-	 */
-	const off = useCallback((event: any) => {
-		const wsService = wsServiceRef.current;
-		if (wsService) {
-			wsService.off(event);
-		}
+	const on = useCallback((event: any, callback: Function): (() => void) => {
+		const sid = sessionIdRef.current;
+		if (!sid) return () => {};
+		return WebSocketService.getForSession(sid).on(event, callback);
 	}, []);
 
-	/**
-	 * Auto-connect on mount when sessionId and accessToken available
-	 */
-	useEffect(() => {
-		if (sessionId && accessToken && !isConnected) {
-			connect();
-		}
-
-		return () => {
-			// Note: Don't auto-disconnect on unmount to preserve connection
-			// Components can call disconnect explicitly if needed
-		};
-	}, [sessionId, accessToken, isConnected, connect]);
+	const off = useCallback((event: any) => {
+		const sid = sessionIdRef.current;
+		if (sid) WebSocketService.getForSession(sid).off(event);
+	}, []);
 
 	return {
-		// State
 		connectionState,
 		isConnected,
 		hasValidSubscription,
 		error: errorMessage,
-
-		// Actions
 		connect,
 		disconnect,
 		sendMessage,
-
-		// Listeners
 		on,
 		off,
 	};
