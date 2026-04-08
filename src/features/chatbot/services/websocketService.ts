@@ -34,30 +34,51 @@ function buildChatWsUrl(baseUrl: string, sessionId: string, token: string): stri
 	if (explicitPath) {
 		return `${cleanBase}${explicitPath.replace(/\/$/, '')}/${sessionId}?token=${token}`;
 	}
-	return `${cleanBase}/ws/chat/${sessionId}?token=${token}`;
+	return `${cleanBase}/api/v1/chat/${sessionId}?token=${token}`;
 }
 
-
 function extractChunkText(message: any): string {
-	
 	if (message.data && typeof message.data.content === 'string') {
 		return message.data.content;
 	}
-	// Fallbacks for other possible structures:
 	if (typeof message.chunk === 'string') return message.chunk;
 	if (message.chunk && typeof message.chunk.content === 'string') return message.chunk.content;
 	if (typeof message.content === 'string') return message.content;
 	if (typeof message.text === 'string') return message.text;
 	if (typeof message.message === 'string') return message.message;
 	if (message.data && typeof message.data.text === 'string') return message.data.text;
-
-	console.warn('[WebSocket] Could not extract text from chunk. Raw:', JSON.stringify(message));
 	return '';
+}
+
+function extractErrorMessage(message: any): string {
+	if (typeof message.message === 'string') {
+		return message.message;
+	}
+	if (message.data && typeof message.data.message === 'string') {
+		const dataMsg = message.data.message;
+		if (dataMsg.startsWith('{') || dataMsg.startsWith('[')) {
+			try {
+				const parsed = JSON.parse(dataMsg);
+				if (parsed.error?.message) {
+					return parsed.error.message;
+				}
+				if (parsed.message) {
+					return parsed.message;
+				}
+			} catch {
+				return dataMsg.substring(0, 200);
+			}
+		}
+		return dataMsg;
+	}
+	if (typeof message.error === 'string') {
+		return message.error;
+	}
+	return JSON.stringify(message).substring(0, 300);
 }
 
 export class WebSocketService {
 	private static instances: Map<string, WebSocketService> = new Map();
-
 	private ws: WebSocket | null = null;
 	private config: WebSocketConfig;
 	private context: WebSocketConnectionContext | null = null;
@@ -95,11 +116,9 @@ export class WebSocketService {
 	public async connect(sessionId: string, accessToken: string): Promise<void> {
 		this.currentSessionId = sessionId;
 		this.accessToken = accessToken;
-
 		if (this.ws) {
 			const state = this.ws.readyState;
 			if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) {
-				console.warn('[WebSocket] Already connected/connecting:', sessionId);
 				return;
 			}
 			if (state === WebSocket.CLOSING) {
@@ -114,7 +133,6 @@ export class WebSocketService {
 				});
 			}
 		}
-
 		try {
 			this.updateContext({
 				sessionId,
@@ -124,22 +142,16 @@ export class WebSocketService {
 				lastMessageTime: Date.now(),
 				attemptCount: this.reconnectAttempts,
 			});
-
 			const url = buildChatWsUrl(this.config.baseUrl, sessionId, accessToken);
-			console.log('[WebSocket] Connecting to:', url.split('?')[0]);
-
 			return new Promise((resolve, reject) => {
 				try {
 					this.ws = new WebSocket(url);
 					this.ws.onmessage = (event) => this.handleMessage(event);
 					this.ws.onerror = () => {
-						console.error('[WebSocket] Connection error for session:', sessionId);
 						this.updateContext({ state: 'ERROR', errorMessage: 'Connection error' });
 					};
 					this.ws.onclose = (event) => this.handleClose(event);
-
 					const connectTimeout = setTimeout(() => {
-						console.error('[WebSocket] Connection timed out');
 						if (this.ws) {
 							this.ws.onclose = null;
 							this.ws.close();
@@ -147,7 +159,6 @@ export class WebSocketService {
 						}
 						reject(new WebSocketError(WebSocketErrorType.CONNECTION_FAILED, 'Connection timeout'));
 					}, this.config.messageTimeout);
-
 					this.ws.onopen = () => {
 						clearTimeout(connectTimeout);
 						this.handleOpen();
@@ -168,14 +179,12 @@ export class WebSocketService {
 		this.stopKeepAlive();
 		this.streamTimeouts.forEach(clearTimeout);
 		this.streamTimeouts.clear();
-
 		if (this.ws) {
 			this.ws.onclose = null;
 			this.ws.onerror = null;
 			this.ws.close(1000, 'Client disconnecting');
 			this.ws = null;
 		}
-
 		this.updateContext({ state: 'DISCONNECTED', isConnected: false });
 		this.emit('onDisconnect', 'User initiated disconnect');
 	}
@@ -220,7 +229,6 @@ export class WebSocketService {
 	}
 
 	private handleOpen(): void {
-		console.log('[WebSocket] ✅ Connected successfully for session:', this.currentSessionId);
 		this.reconnectAttempts = 0;
 		this.updateContext({
 			state: 'AUTHENTICATED',
@@ -236,11 +244,9 @@ export class WebSocketService {
 		try {
 			const message = JSON.parse(event.data);
 			this.updateContext({ lastMessageTime: Date.now() });
-
 			switch (message.type) {
 				case 'user_message':
 				case 'message': {
-					console.log('[WebSocket] Full message received');
 					const normalized: ServerMessagePayload = {
 						type: 'message',
 						sessionId: message.sessionId || this.currentSessionId,
@@ -251,7 +257,6 @@ export class WebSocketService {
 					this.emit('onMessage', normalized);
 					break;
 				}
-
 				case 'chunk':
 				case 'stream': {
 					const chunkText = extractChunkText(message);
@@ -264,10 +269,8 @@ export class WebSocketService {
 					}
 					break;
 				}
-
 				case 'complete':
 				case 'stream_end': {
-					console.log('[WebSocket] Stream complete');
 					const messageId = message.messageId || message.message_id
 						|| (message.data && message.data.messageId)
 						|| '';
@@ -279,46 +282,45 @@ export class WebSocketService {
 					if (messageId) this.clearStreamTimeout(messageId);
 					break;
 				}
-
 				case 'error': {
-					console.error('[WebSocket] Server error:', message.message);
-					this.emit('onError', message as ErrorPayload);
+					const errorMessage = extractErrorMessage(message);
+					const errorPayload: ErrorPayload = {
+						type: 'error',
+						message: errorMessage || 'Unknown error from server',
+					};
+					this.emit('onError', errorPayload);
 					break;
 				}
-
 				case 'subscription_error': {
-					console.error('[WebSocket] Subscription error:', message.code);
+					const errorMessage = extractErrorMessage(message);
 					this.updateContext({ state: 'SUBSCRIPTION_ERROR', hasValidSubscription: false });
-					this.emit('onSubscriptionError', message as SubscriptionErrorPayload);
+					const subscriptionErrorPayload: SubscriptionErrorPayload = {
+						type: 'subscription_error',
+						message: errorMessage || 'Subscription error',
+						code: message.code || 'UNAUTHORIZED',
+					};
+					this.emit('onSubscriptionError', subscriptionErrorPayload);
 					break;
 				}
-
 				case 'pong': {
 					this.emit('onPong');
 					break;
 				}
-
 				default: {
-					console.warn('[WebSocket] Unhandled message type:', message.type, JSON.stringify(message));
 					break;
 				}
 			}
-		} catch (error) {
-			console.error('[WebSocket] Failed to parse message:', error);
-		}
+		} catch (error) {}
 	}
 
 	private handleClose(event: CloseEvent): void {
-		console.log(`[WebSocket] Closed. Code: ${event.code}, Clean: ${event.wasClean}`);
 		this.ws = null;
 		this.stopKeepAlive();
 		this.updateContext({ state: 'DISCONNECTED', isConnected: false });
 		this.emit('onDisconnect', `Code ${event.code}`);
-
 		if (event.code !== 1000 && this.reconnectAttempts < this.config.maxReconnectAttempts) {
 			this.scheduleReconnect();
 		} else if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
-			console.error('[WebSocket] Max reconnect attempts reached');
 			this.emit('onError', { type: 'error', message: 'Failed to connect after multiple attempts' });
 		}
 	}
@@ -329,12 +331,10 @@ export class WebSocketService {
 			this.config.maxReconnectDelay
 		);
 		this.reconnectAttempts++;
-		console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.config.maxReconnectAttempts})`);
 		this.updateContext({ state: 'RECONNECTING', attemptCount: this.reconnectAttempts });
-
 		setTimeout(() => {
 			if (this.currentSessionId && this.accessToken) {
-				this.connect(this.currentSessionId, this.accessToken).catch(console.error);
+				this.connect(this.currentSessionId, this.accessToken).catch(() => {});
 			}
 		}, delay);
 	}
@@ -405,7 +405,7 @@ export class WebSocketService {
 
 	private emit(event: keyof WebSocketEventListeners, ...args: any[]): void {
 		(this.eventListeners.get(event) || []).forEach((cb) => {
-			try { cb(...args); } catch (e) { console.error(`[WebSocket] Listener error (${event}):`, e); }
+			try { cb(...args); } catch (e) {}
 		});
 	}
 

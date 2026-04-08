@@ -14,10 +14,26 @@ import { useAuth } from '@/app/providers/authentication-provider/AuthenticationP
 import { useWebSocketMessage } from '@/features/chatbot/hooks/websocket/useWebSocketMessage'
 import { chatService } from '@/features/chatbot/services/chatService'
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+// localStorage persists across refreshes AND tab closes — unlike sessionStorage
+const ACTIVE_SESSION_KEY = 'okoa_sem_active_chat_session'
+
 const generateId = () => Math.random().toString(36).substr(2, 9)
 
 const getTimeString = (date: Date) =>
   date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+function makeWelcome(): ChatMessageType {
+  return {
+    id: generateId(),
+    role: 'assistant',
+    content: CHATBOT_CONFIG.WELCOME_MESSAGE,
+    timestamp: new Date(),
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ChatbotPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
@@ -30,11 +46,15 @@ export default function ChatbotPage() {
   const [hasCheckedSubscription, setHasCheckedSubscription] = useState(false)
   const [isLight, setIsLight] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const [isRestoringSession, setIsRestoringSession] = useState(false)
 
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const pendingMessageRef = useRef<string | null>(null)
-  // Track whether we're waiting for the WS to connect before sending
   const waitingForConnectionRef = useRef(false)
+
+  // ─── KEY FIX: This ref is only set to true AFTER we confirm subscription ────
+  // It prevents double-execution but never blocks the real restore.
+  const restoreTriggeredRef = useRef(false)
 
   const { user, checkAuthentication } = useAuth()
   const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') || null : null
@@ -49,13 +69,13 @@ export default function ChatbotPage() {
   } = useWebSocketMessage(
     activeChatId,
     authToken,
-    // autoConnect: only connect when we have a session and an active subscription
     !!(activeChatId && subscription.isActive),
     useCallback(() => {}, []),
     useCallback(() => {}, [])
   )
 
-  // Theme detection
+  // ─── Theme detection ────────────────────────────────────────────────────────
+
   useEffect(() => {
     const checkTheme = () => setIsLight(document.body.classList.contains('light-theme'))
     checkTheme()
@@ -64,11 +84,12 @@ export default function ChatbotPage() {
     return () => observer.disconnect()
   }, [])
 
+  // ─── Subscription gate ──────────────────────────────────────────────────────
+
   const { data: hasAccess = false, isLoading: isCheckingAccess } = useChatAccess()
   const { data: subscriptionHistory = [] } = useSubscriptionHistory()
   const activeSubscription = subscriptionHistory.find(s => s.isActive || s.status === 'ACTIVE')
 
-  // Subscription gate check
   useEffect(() => {
     if (isCheckingAccess) return
 
@@ -83,7 +104,6 @@ export default function ChatbotPage() {
         }))
       }
     } else {
-      // Fallback to cached subscription
       try {
         const cached = localStorage.getItem(STORAGE_KEYS.SUBSCRIPTION)
         if (cached) {
@@ -102,17 +122,91 @@ export default function ChatbotPage() {
     setHasCheckedSubscription(true)
   }, [hasAccess, isCheckingAccess])
 
-  // Welcome message
-  useEffect(() => {
-    setMessages([{
-      id: generateId(),
-      role: 'assistant',
-      content: CHATBOT_CONFIG.WELCOME_MESSAGE,
-      timestamp: new Date(),
-    }])
-  }, [])
+  // ─── One-time session restore on page load ──────────────────────────────────
+  //
+  // DEPENDS ONLY ON [hasCheckedSubscription] — this is intentional.
+  //
+  // The subscription gate effect calls setSubscription({ isActive: true }) and
+  // setHasCheckedSubscription(true) in the SAME synchronous block. React 18
+  // batches both into a single re-render, so when this effect fires because
+  // hasCheckedSubscription flipped to true, subscription.isActive is ALREADY
+  // true in the same render snapshot. Reading it directly here is safe.
+  //
+  // If we added subscription.isActive to deps, the effect could fire while
+  // subscription.isActive is still false (separate render batch), causing the
+  // restoreTriggeredRef to be set to true prematurely — blocking the real restore.
+  // ────────────────────────────────────────────────────────────────────────────
 
-  // Load sessions into sidebar whenever subscription becomes active
+  useEffect(() => {
+    // Wait for subscription check to complete
+    if (!hasCheckedSubscription) return
+
+    // Only ever run once per page load
+    if (restoreTriggeredRef.current) return
+    restoreTriggeredRef.current = true
+
+    // Read subscription state — safe because both setState calls above are batched
+    const isSubscribed = subscription.isActive
+
+    if (!isSubscribed) {
+      // No subscription — just show welcome, no API call needed
+      setMessages([makeWelcome()])
+      return
+    }
+
+    const savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
+
+    if (!savedSessionId) {
+      // No previous session stored — fresh start
+      setMessages([makeWelcome()])
+      return
+    }
+
+    // Fetch the saved session from the backend
+    setIsRestoringSession(true)
+    chatService
+      .getSessionById(savedSessionId)
+      .then((session) => {
+        if (session?.messages?.length) {
+          setMessages(
+            session.messages.map((m) => ({
+              id: m.messageId,
+              role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+              content: m.content,
+              timestamp: new Date(m.createdAt),
+            }))
+          )
+          setActiveChatId(savedSessionId)
+        } else {
+          // Session exists on server but has no messages yet
+          setMessages([makeWelcome()])
+          setActiveChatId(savedSessionId)
+        }
+      })
+      .catch((err) => {
+        console.warn('[ChatbotPage] Failed to restore session, starting fresh:', err)
+        // Session no longer exists on server — clear stale key
+        localStorage.removeItem(ACTIVE_SESSION_KEY)
+        setMessages([makeWelcome()])
+      })
+      .finally(() => {
+        setIsRestoringSession(false)
+      })
+
+  // subscription.isActive intentionally omitted from deps — see comment above
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCheckedSubscription])
+
+  // ─── Persist activeChatId to localStorage whenever it changes ───────────────
+
+  useEffect(() => {
+    if (activeChatId) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, activeChatId)
+    }
+  }, [activeChatId])
+
+  // ─── Load sessions into sidebar ─────────────────────────────────────────────
+
   const loadSessions = useCallback(async () => {
     if (!subscription.isActive) return
     try {
@@ -141,15 +235,16 @@ export default function ChatbotPage() {
 
   useEffect(() => { loadSessions() }, [loadSessions])
 
-  // Auto-scroll
+  // ─── Auto-scroll ────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
     }
   }, [messages, isTyping])
 
+  // ─── Send pending message once WS connects ──────────────────────────────────
 
-  // waitingForConnectionRef guards against duplicate sends.
   useEffect(() => {
     if (activeChatId && isConnected && pendingMessageRef.current && waitingForConnectionRef.current) {
       waitingForConnectionRef.current = false
@@ -164,7 +259,8 @@ export default function ChatbotPage() {
     }
   }, [activeChatId, isConnected, sendViaWebSocket])
 
-  // Update assistant placeholder with streamed content
+  // ─── Update assistant placeholder with streamed content ─────────────────────
+
   useEffect(() => {
     if (!streamedContent) return
     setMessages((prev) => {
@@ -177,35 +273,46 @@ export default function ChatbotPage() {
     })
   }, [streamedContent])
 
-  // Streaming complete
+  // ─── Streaming complete ──────────────────────────────────────────────────────
+
   useEffect(() => {
     if (fullResponse && !isLoading) {
       setIsTyping(false)
-      // Refresh sidebar to update timestamps/titles
       loadSessions()
     }
   }, [fullResponse, isLoading])
 
-  // Show WS errors to user
+  // ─── WebSocket error handling ────────────────────────────────────────────────
+
   useEffect(() => {
     if (wsError && isTyping) {
       console.error('[ChatbotPage] WebSocket error:', wsError)
       setIsTyping(false)
+
+      let userMessage = '⚠️ Failed to get a response. Please try again.'
+      if (typeof wsError === 'string') {
+        if (wsError.includes('content_filter') || wsError.includes('content management policy')) {
+          userMessage = '⚠️ Your message was filtered by our content policy. Please rephrase and try again.'
+        } else if (wsError.includes('jailbreak')) {
+          userMessage = '⚠️ Your message appears to contain patterns we cannot process. Please try with different wording.'
+        } else if (wsError.includes('timeout') || wsError.includes('connection')) {
+          userMessage = '⚠️ Connection issue. Please check your internet and try again.'
+        }
+      }
+
       setMessages((prev) => {
-        // Replace empty assistant placeholder with error message
         const last = prev[prev.length - 1]
         if (last?.role === 'assistant' && !last.content) {
           const updated = [...prev]
-          updated[updated.length - 1] = {
-            ...last,
-            content: '⚠️ Failed to get a response. Please try again.',
-          }
+          updated[updated.length - 1] = { ...last, content: userMessage }
           return updated
         }
         return prev
       })
     }
   }, [wsError, isTyping])
+
+  // ─── Send message ────────────────────────────────────────────────────────────
 
   const handleSendMessage = useCallback(async (content: string) => {
     if (!subscription.isActive) {
@@ -219,18 +326,16 @@ export default function ChatbotPage() {
     setIsTyping(true)
 
     if (!activeChatId) {
-      // Create session first, then WS will connect, then pending message will send
       setIsCreatingSession(true)
       try {
         const session = await chatService.createSession()
 
-        // Store message and flag that we're waiting for WS connection
         pendingMessageRef.current = content
         waitingForConnectionRef.current = true
 
         setActiveChatId(session.sessionId)
+        localStorage.setItem(ACTIVE_SESSION_KEY, session.sessionId)
 
-        // Optimistic sidebar update
         const newItem = {
           id: session.sessionId,
           title: session.title || 'New Chat',
@@ -256,7 +361,6 @@ export default function ChatbotPage() {
       return
     }
 
-    // Session already exists — send directly if connected
     if (isConnected) {
       try {
         await sendViaWebSocket(content)
@@ -266,19 +370,21 @@ export default function ChatbotPage() {
         setMessages((prev) => prev.slice(0, -2))
       }
     } else {
-      // WS not connected yet — queue the message
       console.warn('[ChatbotPage] WS not connected, queuing message')
       pendingMessageRef.current = content
       waitingForConnectionRef.current = true
     }
   }, [activeChatId, isConnected, sendViaWebSocket, subscription.isActive])
 
+  // ─── New chat ─────────────────────────────────────────────────────────────────
+
   const handleNewChat = async () => {
     setIsCreatingSession(true)
     try {
       const session = await chatService.createSession()
       setActiveChatId(session.sessionId)
-      setMessages([{ id: generateId(), role: 'assistant', content: CHATBOT_CONFIG.WELCOME_MESSAGE, timestamp: new Date() }])
+      localStorage.setItem(ACTIVE_SESSION_KEY, session.sessionId)
+      setMessages([makeWelcome()])
 
       const newItem = { id: session.sessionId, title: session.title || 'New Chat', time: getTimeString(new Date()), date: new Date() }
       setChatHistory((prev) => {
@@ -294,8 +400,11 @@ export default function ChatbotPage() {
     }
   }
 
+  // ─── Select existing chat ─────────────────────────────────────────────────────
+
   const handleSelectChat = async (chatId: string) => {
     setActiveChatId(chatId)
+    localStorage.setItem(ACTIVE_SESSION_KEY, chatId)
     setSidebarOpen(false)
     setIsTyping(false)
     pendingMessageRef.current = null
@@ -303,20 +412,22 @@ export default function ChatbotPage() {
 
     try {
       const session = await chatService.getSessionById(chatId)
-      if (session.messages?.length) {
+      if (session?.messages?.length) {
         setMessages(session.messages.map((m) => ({
           id: m.messageId,
-          role: m.role === 'USER' ? 'user' : 'assistant' as 'user' | 'assistant',
+          role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
           content: m.content,
           timestamp: new Date(m.createdAt),
         })))
       } else {
-        setMessages([{ id: generateId(), role: 'assistant', content: CHATBOT_CONFIG.WELCOME_MESSAGE, timestamp: new Date() }])
+        setMessages([makeWelcome()])
       }
     } catch {
-      setMessages([{ id: generateId(), role: 'assistant', content: CHATBOT_CONFIG.WELCOME_MESSAGE, timestamp: new Date() }])
+      setMessages([makeWelcome()])
     }
   }
+
+  // ─── Subscription success ─────────────────────────────────────────────────────
 
   const handleSubscriptionSuccess = (plan?: SubscriptionPlan) => {
     const resolvedPlan = plan ?? { id: 'monthly' as const, name: 'Monthly Plan', duration: '30 days access', durationLabel: '30 Days', price: 250 }
@@ -328,21 +439,19 @@ export default function ChatbotPage() {
     checkAuthentication()
   }
 
-  // NOTE: usePayments() was removed from this page intentionally.
-  // It was creating a second PaymentWebSocket (/ws/payments) that failed with 1006
-  // and flooded the console. Payment success is handled by SubscriptionModal's
-  // internal polling + WebSocket, which calls onPaymentSuccess directly.
-  // The global PaymentProvider in (user)/layout.tsx still handles payment events.
+  // ─── Loading state ────────────────────────────────────────────────────────────
 
   const loadingSpinnerStyle: React.CSSProperties = { borderColor: 'rgba(16, 216, 69, 0.2)', borderTopColor: '#00D666' }
 
-  if (!hasCheckedSubscription) {
+  if (!hasCheckedSubscription || isRestoringSession) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A' }}>
         <div className="w-12 h-12 border-4 rounded-full animate-spin" style={loadingSpinnerStyle} />
       </div>
     )
   }
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A' }}>
@@ -364,7 +473,6 @@ export default function ChatbotPage() {
           >
             <div className="flex flex-col">
               {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
-              {/* Show typing indicator only when waiting and no streamed content yet */}
               <TypingIndicator isVisible={isTyping && !streamedContent} />
             </div>
           </div>

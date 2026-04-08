@@ -1,6 +1,7 @@
 import { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import { refreshToken } from '@/features/auth/services/authService'
 import { handleTokenRefreshError } from '@/shared/utils/errorHandler'
+import { getFirebaseIdToken } from '@/features/auth/services/firebaseAuthService'
 
 let isRefreshing = false
 let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: any) => void }[] = []
@@ -17,23 +18,36 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 }
 
 // --- REQUEST INTERCEPTOR ---
-const authRequestInterceptor = (config: InternalAxiosRequestConfig) => {
+// Optimized for high-traffic: checks cached token first, then Firebase token
+const authRequestInterceptor = async (config: InternalAxiosRequestConfig) => {
   // Check if running on the client side
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken')
+    // First, try to use the cached authToken (most common case)
+    let token = localStorage.getItem('authToken')
+
+    // If no cached token, try Firebase token (async operation)
+    // Firebase tokens are cached internally for up to 1 hour
+    if (!token) {
+      try {
+        token = await getFirebaseIdToken()
+      } catch (error) {
+        console.warn('Failed to get Firebase ID token:', error)
+      }
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
   }
-  
+
   // Debug logging for subscription endpoints
   if (config.url?.includes('/subscriptions/') || config.url?.includes('/payments/')) {
     console.log(`[HTTP] ${config.method?.toUpperCase()} ${config.url}`, {
       hasToken: !!config.headers.Authorization,
-      headers: config.headers
+      headers: config.headers,
     })
   }
-  
+
   return config
 }
 

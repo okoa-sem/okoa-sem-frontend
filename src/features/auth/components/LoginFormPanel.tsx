@@ -8,6 +8,7 @@ import GoogleSignInButton from './GoogleSignInButton'
 import EmailPasswordForm from './EmailPasswordForm'
 import OtpVerificationForm from './OtpVerificationForm'
 import { login, verifyLogin2FA, resendOtp } from '@/features/auth/services/authService'
+import { signInWithGoogleAuth } from '@/features/auth/services/googleAuthService'
 import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 
 type LoginStep = 'CREDENTIALS' | '2FA'
@@ -75,6 +76,30 @@ export default function LoginFormPanel() {
     }
   }
 
+  // Handle Google Sign-In
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await signInWithGoogleAuth()
+
+      // Store tokens and user data
+      authLogin(response.user, response.accessToken)
+      localStorage.setItem('refreshToken', response.refreshToken)
+
+      // Redirect
+      const nextParam = searchParams.get('next')
+      const targetUrl = nextParam || '/'
+      
+      window.location.href = targetUrl
+    } catch (error: any) {
+      console.error('Google sign-in error:', error)
+      setError(error.response?.data?.message || error.message || 'Google sign-in failed. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="w-full flex flex-col">
       <div className="text-center mb-6">
@@ -111,7 +136,11 @@ export default function LoginFormPanel() {
           </div>
 
           <div className="mb-5">
-            <GoogleSignInButton onClick={() => alert('Coming soon')} isLoading={isLoading} />
+            <GoogleSignInButton 
+              onClick={handleGoogleSignIn} 
+              isLoading={isLoading}
+              disabled={isLoading}
+            />
           </div>
 
           <div className="text-center mb-4 pt-1">
