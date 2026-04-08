@@ -63,8 +63,8 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
   const isDisabled = disabled || !message.trim()
 
   const getContainerStyle = (): React.CSSProperties => ({
-    backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A',
-    borderTop: isLight ? '2px solid #00D666' : '1px solid #2A2A2A',
+    backgroundColor: isLight ? '#F9FAFB' : '#0F0F12',
+    borderTop: isLight ? '1px solid #E5E7EB' : '1px solid #2A2A2A',
   })
 
   const getTextareaStyle = (): React.CSSProperties => ({
@@ -74,7 +74,7 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
     borderColor: isFocused ? '#00D666' : (isLight ? '#E5E7EB' : '#2A2A2A'),
     color: isLight ? '#1F2937' : '#FFFFFF',
     caretColor: '#00D666',
-    boxShadow: isFocused && isLight ? '0 0 0 3px rgba(16, 216, 69, 0.15)' : 'none',
+    boxShadow: isFocused ? `0 0 0 3px ${isLight ? 'rgba(0, 214, 102, 0.15)' : 'rgba(0, 214, 102, 0.1)'}` : 'none',
   })
 
   const getButtonStyle = (): React.CSSProperties => ({
@@ -83,7 +83,8 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
       : '#00D666',
     color: isDisabled
       ? (isLight ? '#9CA3AF' : '#6B7280')
-      : '#FFFFFF',
+      : isLight ? '#000000' : '#FFFFFF',
+    fontWeight: 600,
   })
 
   return (

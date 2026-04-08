@@ -39,6 +39,7 @@ export default function ChatbotPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatHistorySection[]>([])
   const [subscription, setSubscription] = useState<UserSubscription>({ isActive: false })
@@ -464,16 +465,36 @@ export default function ChatbotPage() {
           activeChatId={activeChatId}
           onSelectChat={handleSelectChat}
           onNewChat={handleNewChat}
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={setSidebarCollapsed}
         />
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ backgroundColor: isLight ? '#FFFFFF' : '#1A1A1A' }}>
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ backgroundColor: isLight ? '#F9FAFB' : '#0F0F12' }}>
           <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto p-4 md:p-8"
-            style={{ backgroundColor: isLight ? '#FFFFFF' : '#1A1A1A', scrollbarWidth: 'thin' }}
+            className="flex-1 overflow-y-auto"
+            style={{ backgroundColor: isLight ? '#F9FAFB' : '#0F0F12', scrollbarWidth: 'thin' }}
           >
-            <div className="flex flex-col">
-              {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
-              <TypingIndicator isVisible={isTyping && !streamedContent} />
+            <div className="max-w-6xl mx-auto py-8 px-4 md:py-12 md:px-8 lg:px-12">
+              <div className="flex flex-col space-y-2">
+                {messages.length === 0 && (
+                  <div className="py-20 text-center">
+                    <div
+                      className="text-2xl font-bold mb-4"
+                      style={{ color: isLight ? '#1F2937' : '#FFFFFF' }}
+                    >
+                      Welcome to Your Study Assistant
+                    </div>
+                    <div
+                      className="text-base"
+                      style={{ color: isLight ? '#6B7280' : '#A0A0A0' }}
+                    >
+                      Ask anything about your studies. I'll help you prepare for your exams!
+                    </div>
+                  </div>
+                )}
+                {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
+                <TypingIndicator isVisible={isTyping && !streamedContent} />
+              </div>
             </div>
           </div>
           <ChatInput
