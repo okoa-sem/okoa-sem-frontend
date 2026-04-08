@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Loader, Check } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Loader, Check, AlertCircle, MessageCircle } from 'lucide-react'
 import { PastPaper, MarkingScheme } from '@/types'
+import { useGenerateMarkingScheme, useCheckMarkingSchemeStatus, useMarkingSchemes } from '@/features/marking-schemes/hooks'
+import { MarkingSchemeContent } from '@/features/marking-schemes/types'
+import Link from 'next/link'
 
 interface GenerateMarkingSchemeModalProps {
   paper: PastPaper | null
@@ -17,52 +20,157 @@ export default function GenerateMarkingSchemeModal({
   onClose, 
   onGenerate 
 }: GenerateMarkingSchemeModalProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [attemptCount, setAttemptCount] = useState(0)
+  const [waitingForGeneration, setWaitingForGeneration] = useState(false)
+
+  // Mutation for initiating generation
+  const generateMutation = useGenerateMarkingScheme()
+
+  // Query for polling status
+  const statusQuery = useCheckMarkingSchemeStatus(sessionId)
+
+  // Fetch all marking schemes as a fallback
+  const { data: allSchemes = [], refetch: refetchSchemes } = useMarkingSchemes()
+
+  // Auto-close after success - but give user time to click buttons
+  useEffect(() => {
+    if (isSuccess) {
+      const timer = setTimeout(() => {
+        onClose()
+        setIsSuccess(false)
+        setSessionId(null)
+        setAttemptCount(0)
+        setWaitingForGeneration(false)
+      }, 5000) // Increased to 5 seconds to let user click buttons
+      return () => clearTimeout(timer)
+    }
+  }, [isSuccess, onClose])
+
+  // Handle status updates
+  useEffect(() => {
+    if (!statusQuery.data) return
+
+    const { status, generatedMarkingScheme } = statusQuery.data
+
+    if (status === 'COMPLETED' && generatedMarkingScheme && paper) {
+      // Convert API response to MarkingScheme type for the callback
+      const markingScheme: MarkingScheme = {
+        id: generatedMarkingScheme.id,
+        userId: 'current-user',
+        paperId: paper.id,
+        paper,
+        content: generatedMarkingScheme.content,
+        createdAt: new Date(generatedMarkingScheme.createdAt),
+        updatedAt: new Date(generatedMarkingScheme.updatedAt),
+      }
+
+      onGenerate(paper, markingScheme)
+        .then(() => {
+          setIsSuccess(true)
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Failed to save marking scheme')
+        })
+    } else if (status === 'FAILED') {
+      setError('Marking scheme generation failed. Please try again.')
+      setSessionId(null)
+    }
+  }, [statusQuery.data, paper, onGenerate])
+
+  // Handle generation errors
+  useEffect(() => {
+    if (generateMutation.error) {
+      const errorMsg = generateMutation.error instanceof Error
+        ? generateMutation.error.message
+        : 'Failed to start marking scheme generation'
+      console.error('Generate mutation error:', generateMutation.error)
+      setError(errorMsg)
+    }
+  }, [generateMutation.error])
+
+  // Fallback: If status check keeps failing, wait and then fetch all schemes
+  useEffect(() => {
+    if (statusQuery.isError && !waitingForGeneration) {
+      const newAttempt = attemptCount + 1
+      setAttemptCount(newAttempt)
+      
+      console.error(`Status check failed (attempt ${newAttempt}):`, statusQuery.error)
+      
+      // After 3 failed attempts, switch to fallback strategy
+      if (newAttempt >= 3) {
+        console.log('Switching to fallback strategy: checking all marking schemes')
+        setWaitingForGeneration(true)
+        
+        // Wait a bit then refetch all schemes
+        const timer = setTimeout(() => {
+          refetchSchemes().then(result => {
+            if (result.data && paper) {
+              // Look for a marking scheme that was just created for this paper
+              const newScheme = result.data.find(
+                (scheme: any) => scheme.examPaperId === parseInt(paper.id.toString(), 10)
+              )
+              
+              if (newScheme) {
+                const markingScheme: MarkingScheme = {
+                  id: newScheme.id,
+                  userId: 'current-user',
+                  paperId: paper.id,
+                  paper,
+                  content: newScheme.content,
+                  createdAt: new Date(newScheme.createdAt),
+                  updatedAt: new Date(newScheme.updatedAt),
+                }
+                
+                onGenerate(paper, markingScheme)
+                  .then(() => {
+                    setIsSuccess(true)
+                  })
+                  .catch((err) => {
+                    setError(err instanceof Error ? err.message : 'Failed to save marking scheme')
+                  })
+              }
+            }
+          })
+        }, 2000)
+        
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [statusQuery.isError, statusQuery.error, attemptCount, waitingForGeneration, paper, onGenerate, refetchSchemes])
 
   if (!isOpen || !paper) return null
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !isLoading) {
+    if (e.target === e.currentTarget && !generateMutation.isPending && !statusQuery.isLoading) {
       onClose()
+      setSessionId(null)
+      setError(null)
+      setAttemptCount(0)
     }
   }
 
   const handleGenerate = async () => {
-    setIsLoading(true)
     setError(null)
-    setIsSuccess(false)
-
+    setAttemptCount(0)
     try {
-      
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      // Create a mock marking scheme
-      const mockMarkingScheme: MarkingScheme = {
-        id: `ms_${Date.now()}`,
-        userId: 'current-user', 
-        paperId: paper.id,
-        paper,
-        content: `# Marking Scheme for ${paper.courseCode}\n\n## ${paper.courseName}\n\n**Exam Type:** ${paper.examType}\n**Year:** ${paper.year}\n**Semester:** ${paper.semester === 'first' ? 'First' : 'Second'}\n\n## Section A\n- Question 1: (10 marks)\n- Question 2: (10 marks)\n- Question 3: (10 marks)\n\n## Section B\n- Question 4: (15 marks)\n- Question 5: (15 marks)\n\n## Marking Guidelines\n1. Award marks based on correct answers\n2. Partial credit may be given for working\n3. Grammar and presentation: up to 2 bonus marks`,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }
-
-      await onGenerate(paper, mockMarkingScheme)
-      setIsSuccess(true)
-
-      // Auto-close after success
-      setTimeout(() => {
-        onClose()
-        setIsSuccess(false)
-      }, 3000)
+      // Paper ID is typically a string in the UI, but the API expects a number
+      const paperIdNum = typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
+      console.log('Generating marking scheme for paper ID:', paperIdNum)
+      const result = await generateMutation.mutateAsync(paperIdNum)
+      console.log('Generation started with session ID:', result.sessionId)
+      setSessionId(result.sessionId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate marking scheme')
-    } finally {
-      setIsLoading(false)
+      const msg = err instanceof Error ? err.message : 'Failed to generate marking scheme'
+      console.error('Error generating marking scheme:', err)
+      setError(msg)
     }
   }
+
+  const isLoading = generateMutation.isPending || statusQuery.isLoading
+  const isGenerating = sessionId !== null && !isSuccess
 
   return (
     <div
@@ -78,95 +186,121 @@ export default function GenerateMarkingSchemeModal({
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors disabled:cursor-not-allowed"
+            className="p-1.5 rounded-lg hover:bg-dark-lighter transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 text-text-gray" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-6">
           {/* Paper Info */}
-          <div className="bg-dark rounded-lg p-4 space-y-2">
-            <div>
-              <p className="text-text-gray text-sm">Course Code</p>
-              <p className="text-white font-semibold">{paper.courseCode}</p>
-            </div>
-            <div>
-              <p className="text-text-gray text-sm">Course Name</p>
-              <p className="text-white font-semibold">{paper.courseName}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-text-gray text-sm">Year</p>
-                <p className="text-white">{paper.year}</p>
-              </div>
-              <div>
-                <p className="text-text-gray text-sm">Semester</p>
-                <p className="text-white">{paper.semester === 'first' ? 'First' : 'Second'}</p>
-              </div>
+          <div className="space-y-2">
+            <p className="text-sm text-text-gray">Exam Paper</p>
+            <p className="text-lg font-semibold text-white">{paper.courseCode}</p>
+            <p className="text-sm text-text-gray">{paper.courseName}</p>
+            <div className="flex gap-4 text-xs text-text-gray pt-2">
+              <span>{paper.year}</span>
+              <span>•</span>
+              <span>
+                {paper.semester === 'first' ? 'Semester 1' : 'Semester 2'}
+              </span>
+              <span>•</span>
+              <span className="capitalize">{paper.examType}</span>
             </div>
           </div>
 
-          {/* Status Messages */}
-          {error && (
-            <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3">
-              <p className="text-red-400 text-sm">{error}</p>
+          {/* Status Display */}
+          {isGenerating && (
+            <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <Loader className="w-5 h-5 text-primary animate-spin" />
+                <div>
+                  <p className="font-medium text-white">
+                    {statusQuery.data?.status === 'PROCESSING'
+                      ? 'Processing...'
+                      : 'Generating Marking Scheme...'}
+                  </p>
+                  <p className="text-xs text-text-gray">
+                    {statusQuery.data?.message ||
+                      'This may take a moment'}
+                  </p>
+                </div>
+              </div>
+              <div className="w-full bg-dark rounded-full h-1 overflow-hidden">
+                <div className="bg-primary h-full w-2/3 animate-pulse" />
+              </div>
             </div>
           )}
 
+          {/* Success State */}
           {isSuccess && (
-            <div className="bg-primary/20 border border-primary/50 rounded-lg p-3 flex items-start gap-2">
-              <Check className="w-4 h-4 text-primary mt-0.5" />
-              <p className="text-primary text-sm">
-                Marking scheme generated successfully! You can find this in your Marking Scheme History.
-              </p>
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <Check className="w-5 h-5 text-green-500" />
+                <div>
+                  <p className="font-medium text-white">Marking Scheme Generated!</p>
+                  <p className="text-xs text-text-gray">What would you like to do next?</p>
+                </div>
+              </div>
             </div>
           )}
 
-          {isLoading && !isSuccess && (
-            <div className="bg-primary/20 border border-primary/50 rounded-lg p-3 flex items-center gap-2">
-              <Loader className="w-4 h-4 text-primary animate-spin" />
-              <p className="text-primary text-sm">Generating marking scheme...</p>
+          {/* Error State */}
+          {error && !isGenerating && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-white text-sm">{error}</p>
+              </div>
             </div>
-          )}
-
-          {/* Info Text */}
-          {!isLoading && !isSuccess && (
-            <p className="text-text-gray text-sm">
-              Click the button below to generate a marking scheme for this paper. The generated scheme will be saved to your marking scheme history.
-            </p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-dark-lighter">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="flex-1 px-4 py-3 bg-dark-lighter text-white rounded-lg font-medium hover:bg-dark-lighter/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSuccess ? 'Done' : 'Cancel'}
-          </button>
-          <button
-            onClick={handleGenerate}
-            disabled={isLoading || isSuccess}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary text-dark rounded-lg font-medium hover:bg-primary-dark transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isLoading ? (
-              <>
-                <Loader className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
-            ) : isSuccess ? (
-              <>
-                <Check className="w-4 h-4" />
-                Generated
-              </>
-            ) : (
-              'Generate'
-            )}
-          </button>
+        <div className="border-t border-dark-lighter px-6 py-4">
+          {isSuccess ? (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors"
+              >
+                Close
+              </button>
+              <Link
+                href={`/chatbot?paper=${paper?.id}`}
+                onClick={onClose}
+                className="flex-1 px-4 py-2 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Go to Chatbot
+              </Link>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  'Generate'
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

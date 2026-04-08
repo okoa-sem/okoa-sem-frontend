@@ -9,7 +9,7 @@ export const httpClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: 60000, // 60 seconds for long-running operations like marking scheme generation
 })
 
 // Setup interceptors

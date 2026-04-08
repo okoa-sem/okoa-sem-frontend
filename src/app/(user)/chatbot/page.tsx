@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { ChatMessage as ChatMessageType, ChatHistorySection, SubscriptionPlan, UserSubscription } from '@/types'
 import { CHATBOT_CONFIG, STORAGE_KEYS } from '@/shared/constants'
 import CompactHeader from '@/shared/components/CompactHeader'
@@ -36,6 +37,9 @@ function makeWelcome(): ChatMessageType {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ChatbotPage() {
+  const searchParams = useSearchParams()
+  const paperId = searchParams?.get('paper')
+
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -146,6 +150,26 @@ export default function ChatbotPage() {
       return
     }
 
+    // Check if we have a paper ID query parameter for marking scheme context
+    if (paperId) {
+      // User is coming from marking scheme generation — create a new session for this paper
+      setIsCreatingSession(true)
+      chatService
+        .createSessionWithContext(`Marking Scheme - Paper ${paperId}`, paperId)
+        .then((newSession) => {
+          setActiveChatId(newSession.sessionId)
+          setMessages([makeWelcome()])
+        })
+        .catch((err) => {
+          console.warn('[ChatbotPage] Failed to create paper-specific session:', err)
+          setMessages([makeWelcome()])
+        })
+        .finally(() => {
+          setIsCreatingSession(false)
+        })
+      return
+    }
+
     const savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
 
     if (!savedSessionId) {
@@ -185,7 +209,7 @@ export default function ChatbotPage() {
         setIsRestoringSession(false)
       })
 
-  }, [hasCheckedSubscription])
+  }, [hasCheckedSubscription, paperId])
 
   // ─── Persist activeChatId to localStorage whenever it changes ───────────────
 
