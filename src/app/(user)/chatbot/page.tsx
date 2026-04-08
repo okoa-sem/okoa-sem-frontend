@@ -17,7 +17,6 @@ import { chatService } from '@/features/chatbot/services/chatService'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// localStorage persists across refreshes AND tab closes — unlike sessionStorage
 const ACTIVE_SESSION_KEY = 'okoa_sem_active_chat_session'
 
 const generateId = () => Math.random().toString(36).substr(2, 9)
@@ -59,8 +58,6 @@ export default function ChatbotPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const pendingMessageRef = useRef<string | null>(null)
   const waitingForConnectionRef = useRef(false)
-
-  
   const restoreTriggeredRef = useRef(false)
 
   useEffect(() => {
@@ -133,73 +130,105 @@ export default function ChatbotPage() {
     setHasCheckedSubscription(true)
   }, [hasAccess, isCheckingAccess])
 
-  
+  // ─── Session init ────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    // Wait for subscription check to complete
     if (!hasCheckedSubscription) return
-
-    // Only ever run once per page load
     if (restoreTriggeredRef.current) return
     restoreTriggeredRef.current = true
 
-    // Read subscription state — safe because both setState calls above are batched
     const isSubscribed = subscription.isActive
 
     if (!isSubscribed) {
-      // No subscription — just show welcome, no API call needed
       setMessages([makeWelcome()])
       return
     }
 
-    // Check if we have a paper ID query parameter for marking scheme context
+    // ── Coming from "View in Chatbot" after marking scheme generation ──────────
     if (paperId) {
-      // User is coming from marking scheme generation — create a new session for this paper
-      setIsCreatingSession(true)
-      // Build session title from paper code and title, fallback to paper ID
-      const sessionTitle = paperCode && paperTitle 
-        ? `${paperCode} - ${paperTitle}` 
-        : `Marking Scheme - Paper ${paperId}`
+      const sessionTitle =
+        paperCode && paperTitle
+          ? `${paperCode} - ${paperTitle}`
+          : `Marking Scheme - Paper ${paperId}`
+
+      setIsRestoringSession(true)
+
+      // First: look through existing sessions for one that matches this paper
       chatService
-        .createSessionWithContext(sessionTitle, paperId)
-        .then((newSession) => {
-          setActiveChatId(newSession.sessionId)
-          setMessages([makeWelcome()])
-          
-          // Add the new session to chat history
-          const newItem = {
-            id: newSession.sessionId,
-            title: sessionTitle,
-            time: getTimeString(new Date()),
-            date: new Date(),
+        .getAllSessions()
+        .then((sessions) => {
+          // Find a session whose title matches this paper (created by GenerateMarkingSchemeModal)
+          const existing = sessions.find(
+            (s) =>
+              s.title === sessionTitle ||
+              // Fallback: title contains the paper code
+              (paperCode && s.title.includes(paperCode))
+          )
+
+          if (existing) {
+            // Load the existing session — it has the marking scheme messages
+            return chatService.getSessionById(existing.sessionId).then((detail) => {
+              if (detail?.messages?.length) {
+                setMessages(
+                  detail.messages.map((m) => ({
+                    id: m.messageId,
+                    role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+                    content: m.content,
+                    timestamp: new Date(m.createdAt),
+                  }))
+                )
+              } else {
+                setMessages([makeWelcome()])
+              }
+              setActiveChatId(existing.sessionId)
+              localStorage.setItem(ACTIVE_SESSION_KEY, existing.sessionId)
+            })
           }
-          setChatHistory((prev) => {
-            const todaySection = prev.find(s => s.label === 'Today')
-            if (todaySection) {
-              return prev.map(s => s.label === 'Today' ? { ...s, items: [newItem, ...s.items] } : s)
-            }
-            return [{ label: 'Today', items: [newItem] }, ...prev]
-          })
+
+          // No existing session found — create a new contextual one
+          return chatService
+            .createSessionWithContext(sessionTitle, paperId)
+            .then((newSession) => {
+              setActiveChatId(newSession.sessionId)
+              setMessages([makeWelcome()])
+
+              const newItem = {
+                id: newSession.sessionId,
+                title: sessionTitle,
+                time: getTimeString(new Date()),
+                date: new Date(),
+              }
+              setChatHistory((prev) => {
+                const todaySection = prev.find((s) => s.label === 'Today')
+                if (todaySection) {
+                  return prev.map((s) =>
+                    s.label === 'Today' ? { ...s, items: [newItem, ...s.items] } : s
+                  )
+                }
+                return [{ label: 'Today', items: [newItem] }, ...prev]
+              })
+              localStorage.setItem(ACTIVE_SESSION_KEY, newSession.sessionId)
+            })
         })
         .catch((err) => {
-          console.warn('[ChatbotPage] Failed to create paper-specific session:', err)
+          console.warn('[ChatbotPage] Failed to handle paper session:', err)
           setMessages([makeWelcome()])
         })
         .finally(() => {
-          setIsCreatingSession(false)
+          setIsRestoringSession(false)
         })
+
       return
     }
 
+    // ── Normal session restore ─────────────────────────────────────────────────
     const savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
 
     if (!savedSessionId) {
-      // No previous session stored — fresh start
       setMessages([makeWelcome()])
       return
     }
 
-    // Fetch the saved session from the backend
     setIsRestoringSession(true)
     chatService
       .getSessionById(savedSessionId)
@@ -215,24 +244,20 @@ export default function ChatbotPage() {
           )
           setActiveChatId(savedSessionId)
         } else {
-          // Session exists on server but has no messages yet
           setMessages([makeWelcome()])
           setActiveChatId(savedSessionId)
         }
       })
-      .catch((err) => {
-        console.warn('[ChatbotPage] Failed to restore session, starting fresh:', err)
-        // Session no longer exists on server — clear stale key
+      .catch(() => {
         localStorage.removeItem(ACTIVE_SESSION_KEY)
         setMessages([makeWelcome()])
       })
       .finally(() => {
         setIsRestoringSession(false)
       })
-
   }, [hasCheckedSubscription, paperId])
 
-  // ─── Persist activeChatId to localStorage whenever it changes ───────────────
+  // ─── Persist activeChatId ────────────────────────────────────────────────────
 
   useEffect(() => {
     if (activeChatId) {
@@ -248,13 +273,19 @@ export default function ChatbotPage() {
       const sessions = await chatService.getAllSessions()
       if (!sessions?.length) return
 
-      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
       const todayItems: ChatHistorySection['items'] = []
       const earlierItems: ChatHistorySection['items'] = []
 
       sessions.forEach((session) => {
         const d = new Date(session.createdAt)
-        const item = { id: session.sessionId, title: session.title || 'New Chat', time: getTimeString(d), date: d }
+        const item = {
+          id: session.sessionId,
+          title: session.title || 'New Chat',
+          time: getTimeString(d),
+          date: d,
+        }
         if (d >= today) todayItems.push(item)
         else earlierItems.push(item)
       })
@@ -268,9 +299,11 @@ export default function ChatbotPage() {
     }
   }, [subscription.isActive])
 
-  useEffect(() => { loadSessions() }, [loadSessions])
+  useEffect(() => {
+    loadSessions()
+  }, [loadSessions])
 
-  // ─── Auto-scroll ────────────────────────────────────────────────────────────
+  // ─── Auto-scroll ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -278,7 +311,7 @@ export default function ChatbotPage() {
     }
   }, [messages, isTyping])
 
-  // ─── Send pending message once WS connects ──────────────────────────────────
+  // ─── Send pending message once WS connects ───────────────────────────────────
 
   useEffect(() => {
     if (activeChatId && isConnected && pendingMessageRef.current && waitingForConnectionRef.current) {
@@ -294,18 +327,15 @@ export default function ChatbotPage() {
     }
   }, [activeChatId, isConnected, sendViaWebSocket])
 
-  // ─── Update assistant placeholder with streamed content ─────────────────────
+  // ─── Update assistant placeholder with streamed content ──────────────────────
 
   useEffect(() => {
     if (!streamedContent) return
     setMessages((prev) => {
       const last = prev[prev.length - 1]
-      // If last message is user, we need to create assistant placeholder first
       if (!last || last.role === 'user') {
-        const assistantPlaceholder: ChatMessageType = { id: generateId(), role: 'assistant', content: streamedContent, timestamp: new Date() }
-        return [...prev, assistantPlaceholder]
+        return [...prev, { id: generateId(), role: 'assistant', content: streamedContent, timestamp: new Date() }]
       }
-      // Update existing assistant message
       if (last.role !== 'assistant' || last.content === streamedContent) return prev
       const updated = [...prev]
       updated[updated.length - 1] = { ...last, content: streamedContent }
@@ -322,7 +352,7 @@ export default function ChatbotPage() {
     }
   }, [fullResponse, isLoading])
 
-  // ─── WebSocket error handling ────────────────────────────────────────────────
+  // ─── WebSocket error handling ─────────────────────────────────────────────────
 
   useEffect(() => {
     if (wsError && isTyping) {
@@ -342,12 +372,9 @@ export default function ChatbotPage() {
 
       setMessages((prev) => {
         const last = prev[prev.length - 1]
-        // If last message is user or there's no assistant message yet, create one
         if (!last || last.role === 'user') {
-          const assistantError: ChatMessageType = { id: generateId(), role: 'assistant', content: userMessage, timestamp: new Date() }
-          return [...prev, assistantError]
+          return [...prev, { id: generateId(), role: 'assistant', content: userMessage, timestamp: new Date() }]
         }
-        // If last message is assistant, update it with error
         if (last.role === 'assistant') {
           const updated = [...prev]
           updated[updated.length - 1] = { ...last, content: userMessage }
@@ -358,7 +385,7 @@ export default function ChatbotPage() {
     }
   }, [wsError, isTyping])
 
-  // ─── Send message ────────────────────────────────────────────────────────────
+  // ─── Send message ─────────────────────────────────────────────────────────────
 
   const handleSendMessage = useCallback(async (content: string) => {
     if (!subscription.isActive) {
@@ -374,10 +401,8 @@ export default function ChatbotPage() {
       setIsCreatingSession(true)
       try {
         const session = await chatService.createSession()
-
         pendingMessageRef.current = content
         waitingForConnectionRef.current = true
-
         setActiveChatId(session.sessionId)
         localStorage.setItem(ACTIVE_SESSION_KEY, session.sessionId)
 
@@ -388,9 +413,11 @@ export default function ChatbotPage() {
           date: new Date(),
         }
         setChatHistory((prev) => {
-          const todaySection = prev.find(s => s.label === 'Today')
+          const todaySection = prev.find((s) => s.label === 'Today')
           if (todaySection) {
-            return prev.map(s => s.label === 'Today' ? { ...s, items: [newItem, ...s.items] } : s)
+            return prev.map((s) =>
+              s.label === 'Today' ? { ...s, items: [newItem, ...s.items] } : s
+            )
           }
           return [{ label: 'Today', items: [newItem] }, ...prev]
         })
@@ -415,7 +442,6 @@ export default function ChatbotPage() {
         setMessages((prev) => prev.slice(0, -1))
       }
     } else {
-      console.warn('[ChatbotPage] WS not connected, queuing message')
       pendingMessageRef.current = content
       waitingForConnectionRef.current = true
     }
@@ -424,7 +450,6 @@ export default function ChatbotPage() {
   // ─── New chat ─────────────────────────────────────────────────────────────────
 
   const handleNewChat = async () => {
-    // Don't create a session yet - just reset the UI for a new chat
     setActiveChatId(null)
     localStorage.removeItem(ACTIVE_SESSION_KEY)
     setMessages([])
@@ -447,12 +472,14 @@ export default function ChatbotPage() {
     try {
       const session = await chatService.getSessionById(chatId)
       if (session?.messages?.length) {
-        setMessages(session.messages.map((m) => ({
-          id: m.messageId,
-          role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content,
-          timestamp: new Date(m.createdAt),
-        })))
+        setMessages(
+          session.messages.map((m) => ({
+            id: m.messageId,
+            role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: m.content,
+            timestamp: new Date(m.createdAt),
+          }))
+        )
       } else {
         setMessages([makeWelcome()])
       }
@@ -464,22 +491,40 @@ export default function ChatbotPage() {
   // ─── Subscription success ─────────────────────────────────────────────────────
 
   const handleSubscriptionSuccess = (plan?: SubscriptionPlan) => {
-    const resolvedPlan = plan ?? { id: 'monthly' as const, name: 'Monthly Plan', duration: '30 days access', durationLabel: '30 Days', price: 250 }
+    const resolvedPlan = plan ?? {
+      id: 'monthly' as const,
+      name: 'Monthly Plan',
+      duration: '30 days access',
+      durationLabel: '30 Days',
+      price: 250,
+    }
     const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + (resolvedPlan.id === 'daily' ? 1 : resolvedPlan.id === 'weekly' ? 7 : 30))
+    expiresAt.setDate(
+      expiresAt.getDate() +
+        (resolvedPlan.id === 'daily' ? 1 : resolvedPlan.id === 'weekly' ? 7 : 30)
+    )
     setSubscription({ isActive: true, plan: resolvedPlan, expiresAt })
-    localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION, JSON.stringify({ isActive: true, expiresAt: expiresAt.toISOString() }))
+    localStorage.setItem(
+      STORAGE_KEYS.SUBSCRIPTION,
+      JSON.stringify({ isActive: true, expiresAt: expiresAt.toISOString() })
+    )
     setShowSubscriptionModal(false)
     checkAuthentication()
   }
 
   // ─── Loading state ────────────────────────────────────────────────────────────
 
-  const loadingSpinnerStyle: React.CSSProperties = { borderColor: 'rgba(16, 216, 69, 0.2)', borderTopColor: '#00D666' }
+  const loadingSpinnerStyle: React.CSSProperties = {
+    borderColor: 'rgba(16, 216, 69, 0.2)',
+    borderTopColor: '#00D666',
+  }
 
   if (!hasCheckedSubscription || isRestoringSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A' }}>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A' }}
+      >
         <div className="w-12 h-12 border-4 rounded-full animate-spin" style={loadingSpinnerStyle} />
       </div>
     )
@@ -488,8 +533,14 @@ export default function ChatbotPage() {
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A' }}>
-      <CompactHeader onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} isSidebarOpen={sidebarOpen} />
+    <div
+      className="h-screen flex flex-col overflow-hidden"
+      style={{ backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A' }}
+    >
+      <CompactHeader
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        isSidebarOpen={sidebarOpen}
+      />
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <ChatSidebar
           isOpen={sidebarOpen}
@@ -501,22 +552,32 @@ export default function ChatbotPage() {
           isCollapsed={sidebarCollapsed}
           onToggleCollapse={setSidebarCollapsed}
         />
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ backgroundColor: isLight ? '#F9FAFB' : '#0F0F12' }}>
+        <main
+          className="flex-1 flex flex-col min-w-0 overflow-hidden"
+          style={{ backgroundColor: isLight ? '#F9FAFB' : '#0F0F12' }}
+        >
           <div
             ref={chatContainerRef}
             className="flex-1 overflow-y-auto"
-            style={{ backgroundColor: isLight ? '#F9FAFB' : '#0F0F12', scrollbarWidth: 'thin' }}
+            style={{
+              backgroundColor: isLight ? '#F9FAFB' : '#0F0F12',
+              scrollbarWidth: 'thin',
+            }}
           >
             <div className="max-w-6xl mx-auto px-4 md:px-8 lg:px-12 flex flex-col">
               {messages.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 px-4">
-                  {/* Welcome Message */}
                   <div className="text-center mb-12">
                     <h1
                       className="text-4xl md:text-5xl font-bold mb-4"
                       style={{ color: isLight ? '#1F2937' : '#FFFFFF' }}
                     >
-                      Good {currentHour < 12 ? 'Morning' : currentHour < 18 ? 'Afternoon' : 'Evening'}
+                      Good{' '}
+                      {currentHour < 12
+                        ? 'Morning'
+                        : currentHour < 18
+                        ? 'Afternoon'
+                        : 'Evening'}
                     </h1>
                     <p
                       className="text-lg md:text-xl"
@@ -526,29 +587,28 @@ export default function ChatbotPage() {
                     </p>
                   </div>
 
-                  {/* Suggested Prompts */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
                     {[
                       {
                         icon: '📚',
                         title: 'Explain a Concept',
-                        prompt: 'Help me understand the concept of photosynthesis'
+                        prompt: 'Help me understand the concept of photosynthesis',
                       },
                       {
                         icon: '✏️',
                         title: 'Solve a Problem',
-                        prompt: 'Solve this quadratic equation: x² + 5x + 6 = 0'
+                        prompt: 'Solve this quadratic equation: x² + 5x + 6 = 0',
                       },
                       {
                         icon: '📝',
                         title: 'Essay Help',
-                        prompt: 'Help me write an essay about the French Revolution'
+                        prompt: 'Help me write an essay about the French Revolution',
                       },
                       {
                         icon: '🧠',
                         title: 'Quiz Me',
-                        prompt: 'Create a quiz question about World War II'
-                      }
+                        prompt: 'Create a quiz question about World War II',
+                      },
                     ].map((suggestion, index) => (
                       <button
                         key={index}
@@ -573,7 +633,9 @@ export default function ChatbotPage() {
                 </div>
               ) : (
                 <div className="py-8 flex flex-col space-y-2">
-                  {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
+                  {messages.map((message) => (
+                    <ChatMessage key={message.id} message={message} />
+                  ))}
                   <TypingIndicator isVisible={isTyping && !streamedContent} />
                 </div>
               )}
@@ -583,9 +645,11 @@ export default function ChatbotPage() {
             onSend={handleSendMessage}
             disabled={isTyping || isCreatingSession}
             placeholder={
-              isCreatingSession ? 'Setting up chat...' :
-              !isConnected && !!activeChatId ? 'Connecting...' :
-              'Ask me anything...'
+              isCreatingSession
+                ? 'Setting up chat...'
+                : !isConnected && !!activeChatId
+                ? 'Connecting...'
+                : 'Ask me anything...'
             }
           />
         </main>

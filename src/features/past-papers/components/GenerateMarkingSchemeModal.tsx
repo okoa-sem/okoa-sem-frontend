@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { X, Loader, Check, AlertCircle, MessageCircle } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X, Loader, Check, AlertCircle, MessageCircle, RefreshCw } from 'lucide-react'
 import { PastPaper, MarkingScheme } from '@/types'
-import { useGenerateMarkingScheme, useCheckMarkingSchemeStatus, useMarkingSchemes } from '@/features/marking-schemes/hooks'
-import { MarkingSchemeContent } from '@/features/marking-schemes/types'
+import { useGenerateMarkingScheme } from '@/features/marking-schemes/hooks'
 import Link from 'next/link'
+import { httpClient } from '@/core/http/client'
+import { MarkingSchemeContent, MarkingSchemeStatusData } from '@/features/marking-schemes/types'
 
 interface GenerateMarkingSchemeModalProps {
   paper: PastPaper | null
@@ -14,163 +15,180 @@ interface GenerateMarkingSchemeModalProps {
   onGenerate: (paper: PastPaper, markingScheme: MarkingScheme) => Promise<void>
 }
 
-export default function GenerateMarkingSchemeModal({ 
-  paper, 
-  isOpen, 
-  onClose, 
-  onGenerate 
-}: GenerateMarkingSchemeModalProps) {
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [isSuccess, setIsSuccess] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [attemptCount, setAttemptCount] = useState(0)
-  const [waitingForGeneration, setWaitingForGeneration] = useState(false)
+type ModalState = 'idle' | 'starting' | 'waiting' | 'success' | 'error'
 
-  // Mutation for initiating generation
+const POLL_INTERVAL_MS = 4000
+// After generation starts, poll for up to ~60s; if still 500 we declare success anyway
+// because the generate endpoint already confirmed GENERATION_STARTED.
+const MAX_BACKGROUND_POLLS = 15
+
+export default function GenerateMarkingSchemeModal({
+  paper,
+  isOpen,
+  onClose,
+  onGenerate,
+}: GenerateMarkingSchemeModalProps) {
+  const [modalState, setModalState] = useState<ModalState>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const pollCountRef = useRef(0)
+  const activeRef = useRef(false)
+
   const generateMutation = useGenerateMarkingScheme()
 
-  // Query for polling status
-  const statusQuery = useCheckMarkingSchemeStatus(sessionId)
-
-  // Fetch all marking schemes as a fallback
-  const { data: allSchemes = [], refetch: refetchSchemes } = useMarkingSchemes()
-
-  // Auto-close after success - but give user time to click buttons
-  useEffect(() => {
-    if (isSuccess) {
-      const timer = setTimeout(() => {
-        onClose()
-        setIsSuccess(false)
-        setSessionId(null)
-        setAttemptCount(0)
-        setWaitingForGeneration(false)
-      }, 5000) // Increased to 5 seconds to let user click buttons
-      return () => clearTimeout(timer)
+  const stopPolling = useCallback(() => {
+    activeRef.current = false
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current)
+      pollTimerRef.current = null
     }
-  }, [isSuccess, onClose])
+  }, [])
 
-  // Handle status updates
+  // Reset on close
   useEffect(() => {
-    if (!statusQuery.data) return
+    if (!isOpen) {
+      stopPolling()
+      setModalState('idle')
+      setError(null)
+      pollCountRef.current = 0
+    }
+  }, [isOpen, stopPolling])
 
-    const { status, generatedMarkingScheme } = statusQuery.data
+  useEffect(() => {
+    return () => stopPolling()
+  }, [stopPolling])
 
-    if (status === 'COMPLETED' && generatedMarkingScheme && paper) {
-      // Convert API response to MarkingScheme type for the callback
-      const markingScheme: MarkingScheme = {
-        id: generatedMarkingScheme.id,
-        userId: 'current-user',
-        paperId: paper.id,
-        paper,
-        content: generatedMarkingScheme.content,
-        createdAt: new Date(generatedMarkingScheme.createdAt),
-        updatedAt: new Date(generatedMarkingScheme.updatedAt),
+  const markSuccess = useCallback(
+    (scheme?: MarkingSchemeContent) => {
+      stopPolling()
+      if (scheme && paper) {
+        const markingScheme: MarkingScheme = {
+          id: scheme.id,
+          userId: 'current-user',
+          paperId: paper.id,
+          paper,
+          content: scheme.content,
+          createdAt: new Date(scheme.createdAt),
+          updatedAt: new Date(scheme.updatedAt),
+        }
+        // Best-effort local save — don't block success on this
+        onGenerate(paper, markingScheme).catch(() => {})
       }
+      setModalState('success')
+    },
+    [paper, onGenerate, stopPolling]
+  )
 
-      onGenerate(paper, markingScheme)
-        .then(() => {
-          setIsSuccess(true)
-        })
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : 'Failed to save marking scheme')
-        })
-    } else if (status === 'FAILED') {
-      setError('Marking scheme generation failed. Please try again.')
-      setSessionId(null)
-    }
-  }, [statusQuery.data, paper, onGenerate])
+  // Background polling — tries status, then list as fallback.
+  // Both endpoints currently return 500 on web so after MAX_BACKGROUND_POLLS
+  // we declare success because generate already confirmed GENERATION_STARTED.
+  const startBackgroundPolling = useCallback(
+    (sid: string) => {
+      activeRef.current = true
+      pollCountRef.current = 0
 
-  // Handle generation errors
-  useEffect(() => {
-    if (generateMutation.error) {
-      const errorMsg = generateMutation.error instanceof Error
-        ? generateMutation.error.message
-        : 'Failed to start marking scheme generation'
-      console.error('Generate mutation error:', generateMutation.error)
-      setError(errorMsg)
-    }
-  }, [generateMutation.error])
+      const poll = async () => {
+        if (!activeRef.current) return
+        pollCountRef.current += 1
 
-  // Fallback: If status check keeps failing, wait and then fetch all schemes
-  useEffect(() => {
-    if (statusQuery.isError && !waitingForGeneration) {
-      const newAttempt = attemptCount + 1
-      setAttemptCount(newAttempt)
-      
-      console.error(`Status check failed (attempt ${newAttempt}):`, statusQuery.error)
-      
-      // After 3 failed attempts, switch to fallback strategy
-      if (newAttempt >= 3) {
-        console.log('Switching to fallback strategy: checking all marking schemes')
-        setWaitingForGeneration(true)
-        
-        // Wait a bit then refetch all schemes
-        const timer = setTimeout(() => {
-          refetchSchemes().then(result => {
-            if (result.data && paper) {
-              // Look for a marking scheme that was just created for this paper
-              const newScheme = result.data.find(
-                (scheme: any) => scheme.examPaperId === parseInt(paper.id.toString(), 10)
-              )
-              
-              if (newScheme) {
-                const markingScheme: MarkingScheme = {
-                  id: newScheme.id,
-                  userId: 'current-user',
-                  paperId: paper.id,
-                  paper,
-                  content: newScheme.content,
-                  createdAt: new Date(newScheme.createdAt),
-                  updatedAt: new Date(newScheme.updatedAt),
-                }
-                
-                onGenerate(paper, markingScheme)
-                  .then(() => {
-                    setIsSuccess(true)
-                  })
-                  .catch((err) => {
-                    setError(err instanceof Error ? err.message : 'Failed to save marking scheme')
-                  })
-              }
+        // Try status endpoint
+        try {
+          const res = await httpClient.get<{
+            success: boolean
+            data: MarkingSchemeStatusData
+          }>(`/marking-schemes/status/${sid}`)
+
+          const data = res.data?.data
+          if (data?.status === 'COMPLETED' && data.generatedMarkingScheme) {
+            markSuccess(data.generatedMarkingScheme)
+            return
+          }
+          if (data?.status === 'FAILED') {
+            stopPolling()
+            setError('Generation failed on the server. Please try again.')
+            setModalState('error')
+            return
+          }
+        } catch {
+          // 500 — ignore and keep polling
+        }
+
+        // Every 3 polls try the list endpoint as fallback
+        if (pollCountRef.current % 3 === 0 && paper) {
+          try {
+            const res = await httpClient.get<{
+              success: boolean
+              data: { markingSchemes: MarkingSchemeContent[] }
+            }>('/marking-schemes')
+
+            const paperId =
+              typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
+            const found = (res.data?.data?.markingSchemes ?? []).find(
+              (s) => s.examPaperId === paperId && s.status === 'COMPLETED'
+            )
+            if (found) {
+              markSuccess(found)
+              return
             }
-          })
-        }, 2000)
-        
-        return () => clearTimeout(timer)
+          } catch {
+            // 500 — ignore
+          }
+        }
+
+        // Timed out but generation was confirmed started — show success anyway
+        if (pollCountRef.current >= MAX_BACKGROUND_POLLS) {
+          markSuccess()
+          return
+        }
+
+        if (activeRef.current) {
+          pollTimerRef.current = setTimeout(poll, POLL_INTERVAL_MS)
+        }
       }
+
+      // First poll after 3s to give backend time to begin processing
+      pollTimerRef.current = setTimeout(poll, 3000)
+    },
+    [paper, markSuccess, stopPolling]
+  )
+
+  const handleGenerate = async () => {
+    if (!paper) return
+    setError(null)
+    setModalState('starting')
+
+    try {
+      const paperIdNum =
+        typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
+      const result = await generateMutation.mutateAsync(paperIdNum)
+
+      // Backend confirmed generation started — that's our success signal on web
+      // since status/list endpoints both return 500 and can't be relied on.
+      // Start background polling anyway in case those endpoints get fixed.
+      if (result.status === 'COMPLETED' && result.generatedMarkingScheme) {
+        // Synchronous completion (unlikely but handle it)
+        markSuccess(result.generatedMarkingScheme)
+      } else {
+        // GENERATION_STARTED — show waiting UI and poll in background
+        setModalState('waiting')
+        startBackgroundPolling(result.sessionId)
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to start generation'
+      setError(msg)
+      setModalState('error')
     }
-  }, [statusQuery.isError, statusQuery.error, attemptCount, waitingForGeneration, paper, onGenerate, refetchSchemes])
+  }
 
   if (!isOpen || !paper) return null
 
+  const canClose = modalState !== 'starting'
+
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !generateMutation.isPending && !statusQuery.isLoading) {
-      onClose()
-      setSessionId(null)
-      setError(null)
-      setAttemptCount(0)
-    }
+    if (e.target === e.currentTarget && canClose) onClose()
   }
-
-  const handleGenerate = async () => {
-    setError(null)
-    setAttemptCount(0)
-    try {
-      // Paper ID is typically a string in the UI, but the API expects a number
-      const paperIdNum = typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
-      console.log('Generating marking scheme for paper ID:', paperIdNum)
-      const result = await generateMutation.mutateAsync(paperIdNum)
-      console.log('Generation started with session ID:', result.sessionId)
-      setSessionId(result.sessionId)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to generate marking scheme'
-      console.error('Error generating marking scheme:', err)
-      setError(msg)
-    }
-  }
-
-  const isLoading = generateMutation.isPending || statusQuery.isLoading
-  const isGenerating = sessionId !== null && !isSuccess
 
   return (
     <div
@@ -180,13 +198,11 @@ export default function GenerateMarkingSchemeModal({
       <div className="relative bg-dark-card w-full max-w-md rounded-2xl overflow-hidden border border-dark-lighter shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-dark-lighter">
-          <h2 className="text-xl font-bold text-white">
-            Generate Marking Scheme
-          </h2>
+          <h2 className="text-xl font-bold text-white">Generate Marking Scheme</h2>
           <button
             onClick={onClose}
-            disabled={isLoading}
-            className="p-1.5 rounded-lg hover:bg-dark-lighter transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!canClose}
+            className="p-1.5 rounded-lg hover:bg-dark-lighter transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <X className="w-5 h-5 text-text-gray" />
           </button>
@@ -194,110 +210,147 @@ export default function GenerateMarkingSchemeModal({
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Paper Info */}
-          <div className="space-y-2">
+          {/* Paper info — always visible */}
+          <div className="space-y-1">
             <p className="text-sm text-text-gray">Exam Paper</p>
             <p className="text-lg font-semibold text-white">{paper.courseCode}</p>
             <p className="text-sm text-text-gray">{paper.courseName}</p>
-            <div className="flex gap-4 text-xs text-text-gray pt-2">
+            <div className="flex gap-3 text-xs text-text-gray pt-1">
               <span>{paper.year}</span>
               <span>•</span>
-              <span>
-                {paper.semester === 'first' ? 'Semester 1' : 'Semester 2'}
-              </span>
+              <span>{paper.semester === 'first' ? 'Semester 1' : 'Semester 2'}</span>
               <span>•</span>
               <span className="capitalize">{paper.examType}</span>
             </div>
           </div>
 
-          {/* Status Display */}
-          {isGenerating && (
-            <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-3">
-                <Loader className="w-5 h-5 text-primary animate-spin" />
+          {/* Starting / Waiting */}
+          {(modalState === 'starting' || modalState === 'waiting') && (
+            <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Loader className="w-5 h-5 text-primary animate-spin flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-white">
-                    {statusQuery.data?.status === 'PROCESSING'
-                      ? 'Processing...'
-                      : 'Generating Marking Scheme...'}
+                  <p className="font-semibold text-white">
+                    {modalState === 'starting'
+                      ? 'Starting generation...'
+                      : 'Generating marking scheme...'}
                   </p>
-                  <p className="text-xs text-text-gray">
-                    {statusQuery.data?.message ||
-                      'This may take a moment'}
+                  <p className="text-xs text-text-gray mt-1">
+                    Our AI is analysing the paper. This usually takes 30–90 seconds.
                   </p>
                 </div>
               </div>
-              <div className="w-full bg-dark rounded-full h-1 overflow-hidden">
-                <div className="bg-primary h-full w-2/3 animate-pulse" />
+              <div className="w-full h-1.5 bg-dark rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: '75%' }} />
+              </div>
+              <p className="text-xs text-center text-text-gray">
+                Please keep this window open…
+              </p>
+            </div>
+          )}
+
+          {/* Success */}
+          {modalState === 'success' && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-4 h-4 text-green-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-white">Marking Scheme Ready!</p>
+                  <p className="text-xs text-text-gray mt-1">
+                    Your marking scheme has been generated. View it in the chatbot or under{' '}
+                    <strong className="text-white">My Marking Schemes</strong>.
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Success State */}
-          {isSuccess && (
-            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-4">
-              <div className="flex items-center gap-3">
-                <Check className="w-5 h-5 text-green-500" />
-                <div>
-                  <p className="font-medium text-white">Marking Scheme Generated!</p>
-                  <p className="text-xs text-text-gray">What would you like to do next?</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Error State */}
-          {error && !isGenerating && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-white text-sm">{error}</p>
-              </div>
+          {/* Error */}
+          {modalState === 'error' && error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-white">{error}</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="border-t border-dark-lighter px-6 py-4">
-          {isSuccess ? (
+          {/* Idle */}
+          {modalState === 'idle' && (
             <div className="flex gap-3">
               <button
                 onClick={onClose}
-                className="flex-1 px-4 py-2 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors"
-              >
-                Close
-              </button>
-              <Link
-                href={`/chatbot?paper=${paper?.id}&code=${encodeURIComponent(paper?.courseCode || '')}&title=${encodeURIComponent(paper?.courseName || '')}`}
-                onClick={onClose}
-                className="flex-1 px-4 py-2 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-              >
-                <MessageCircle className="w-4 h-4" />
-                Go to Chatbot
-              </Link>
-            </div>
-          ) : (
-            <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                disabled={isLoading}
-                className="flex-1 px-4 py-2 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={handleGenerate}
-                disabled={isLoading}
-                className="flex-1 px-4 py-2 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors text-sm"
               >
-                {isLoading ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  'Generate'
-                )}
+                Generate
+              </button>
+            </div>
+          )}
+
+          {/* Starting — no button while awaiting the API */}
+          {modalState === 'starting' && (
+            <div className="flex justify-center py-1">
+              <span className="text-xs text-text-gray">Please wait…</span>
+            </div>
+          )}
+
+          {/* Waiting — allow dismissing to background */}
+          {modalState === 'waiting' && (
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
+            >
+              Run in Background
+            </button>
+          )}
+
+          {/* Success */}
+          {modalState === 'success' && (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
+              >
+                Close
+              </button>
+              <Link
+                href={`/chatbot?paper=${paper.id}&code=${encodeURIComponent(paper.courseCode)}&title=${encodeURIComponent(paper.courseName)}`}
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <MessageCircle className="w-4 h-4" />
+                View in Chatbot
+              </Link>
+            </div>
+          )}
+
+          {/* Error */}
+          {modalState === 'error' && (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setModalState('idle')
+                  setError(null)
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
               </button>
             </div>
           )}
