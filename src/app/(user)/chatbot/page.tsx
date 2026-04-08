@@ -39,6 +39,8 @@ function makeWelcome(): ChatMessageType {
 export default function ChatbotPage() {
   const searchParams = useSearchParams()
   const paperId = searchParams?.get('paper')
+  const paperCode = searchParams?.get('code')
+  const paperTitle = searchParams?.get('title')
 
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [isTyping, setIsTyping] = useState(false)
@@ -154,11 +156,30 @@ export default function ChatbotPage() {
     if (paperId) {
       // User is coming from marking scheme generation — create a new session for this paper
       setIsCreatingSession(true)
+      // Build session title from paper code and title, fallback to paper ID
+      const sessionTitle = paperCode && paperTitle 
+        ? `${paperCode} - ${paperTitle}` 
+        : `Marking Scheme - Paper ${paperId}`
       chatService
-        .createSessionWithContext(`Marking Scheme - Paper ${paperId}`, paperId)
+        .createSessionWithContext(sessionTitle, paperId)
         .then((newSession) => {
           setActiveChatId(newSession.sessionId)
           setMessages([makeWelcome()])
+          
+          // Add the new session to chat history
+          const newItem = {
+            id: newSession.sessionId,
+            title: sessionTitle,
+            time: getTimeString(new Date()),
+            date: new Date(),
+          }
+          setChatHistory((prev) => {
+            const todaySection = prev.find(s => s.label === 'Today')
+            if (todaySection) {
+              return prev.map(s => s.label === 'Today' ? { ...s, items: [newItem, ...s.items] } : s)
+            }
+            return [{ label: 'Today', items: [newItem] }, ...prev]
+          })
         })
         .catch((err) => {
           console.warn('[ChatbotPage] Failed to create paper-specific session:', err)

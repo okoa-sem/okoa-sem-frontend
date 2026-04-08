@@ -268,7 +268,7 @@ export default function GenerateMarkingSchemeModal({
                 Close
               </button>
               <Link
-                href={`/chatbot?paper=${paper?.id}`}
+                href={`/chatbot?paper=${paper?.id}&code=${encodeURIComponent(paper?.courseCode || '')}&title=${encodeURIComponent(paper?.courseName || '')}`}
                 onClick={onClose}
                 className="flex-1 px-4 py-2 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
               >
