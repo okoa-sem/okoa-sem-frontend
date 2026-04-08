@@ -25,7 +25,7 @@ export default function SubscriptionModal({
 }: SubscriptionModalProps) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<ModalStep>('plan-selection')
-  const [selectedPlan, setSelectedPlan] = useState<'daily' | 'monthly'>('monthly')
+  const [selectedPlan, setSelectedPlan] = useState<'daily' | 'weekly' | 'monthly'>('monthly')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [phoneError, setPhoneError] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -242,7 +242,7 @@ export default function SubscriptionModal({
 
   const plan = SUBSCRIPTION_PLANS[selectedPlan]
 
-  const handlePlanSelect = (planId: 'daily' | 'monthly') => {
+  const handlePlanSelect = (planId: 'daily' | 'weekly' | 'monthly') => {
     setSelectedPlan(planId)
   }
 
@@ -406,6 +406,41 @@ export default function SubscriptionModal({
                     }`}
                   >
                     {selectedPlan === 'daily' && (
+                      <div className="w-2.5 h-2.5 bg-dark rounded-full" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Weekly Plan */}
+                <button
+                  onClick={() => handlePlanSelect('weekly')}
+                  className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 mb-3 transition-all ${
+                    selectedPlan === 'weekly'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-dark-lighter bg-dark-card hover:border-primary/50'
+                  }`}
+                >
+                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+                    <CalendarDays className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <div className="font-semibold text-white">Weekly Plan</div>
+                    <div className="text-sm text-text-gray">7 days access</div>
+                  </div>
+                  {selectedPlan === 'weekly' && (
+                    <span className="bg-primary text-dark px-2 py-0.5 rounded text-xs font-semibold">
+                      Best Value
+                    </span>
+                  )}
+                  <div className="text-primary font-bold text-lg">KSh {SUBSCRIPTION_PLANS.weekly.price}</div>
+                  <div
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                      selectedPlan === 'weekly'
+                        ? 'border-primary bg-primary'
+                        : 'border-dark-lighter'
+                    }`}
+                  >
+                    {selectedPlan === 'weekly' && (
                       <div className="w-2.5 h-2.5 bg-dark rounded-full" />
                     )}
                   </div>

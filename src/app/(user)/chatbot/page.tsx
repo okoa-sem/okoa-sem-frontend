@@ -48,14 +48,18 @@ export default function ChatbotPage() {
   const [isLight, setIsLight] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [isRestoringSession, setIsRestoringSession] = useState(false)
+  const [currentHour, setCurrentHour] = useState<number>(new Date().getHours())
 
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const pendingMessageRef = useRef<string | null>(null)
   const waitingForConnectionRef = useRef(false)
 
-  // ─── KEY FIX: This ref is only set to true AFTER we confirm subscription ────
-  // It prevents double-execution but never blocks the real restore.
+  
   const restoreTriggeredRef = useRef(false)
+
+  useEffect(() => {
+    setCurrentHour(new Date().getHours())
+  }, [])
 
   const { user, checkAuthentication } = useAuth()
   const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') || null : null
@@ -123,20 +127,7 @@ export default function ChatbotPage() {
     setHasCheckedSubscription(true)
   }, [hasAccess, isCheckingAccess])
 
-  // ─── One-time session restore on page load ──────────────────────────────────
-  //
-  // DEPENDS ONLY ON [hasCheckedSubscription] — this is intentional.
-  //
-  // The subscription gate effect calls setSubscription({ isActive: true }) and
-  // setHasCheckedSubscription(true) in the SAME synchronous block. React 18
-  // batches both into a single re-render, so when this effect fires because
-  // hasCheckedSubscription flipped to true, subscription.isActive is ALREADY
-  // true in the same render snapshot. Reading it directly here is safe.
-  //
-  // If we added subscription.isActive to deps, the effect could fire while
-  // subscription.isActive is still false (separate render batch), causing the
-  // restoreTriggeredRef to be set to true prematurely — blocking the real restore.
-  // ────────────────────────────────────────────────────────────────────────────
+  
 
   useEffect(() => {
     // Wait for subscription check to complete
@@ -194,8 +185,6 @@ export default function ChatbotPage() {
         setIsRestoringSession(false)
       })
 
-  // subscription.isActive intentionally omitted from deps — see comment above
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasCheckedSubscription])
 
   // ─── Persist activeChatId to localStorage whenever it changes ───────────────
@@ -255,7 +244,7 @@ export default function ChatbotPage() {
       sendViaWebSocket(msg).catch((err) => {
         console.error('[ChatbotPage] Failed to send pending message:', err)
         setIsTyping(false)
-        setMessages((prev) => prev.filter(m => m.role !== 'assistant' || m.content !== ''))
+        setMessages((prev) => prev.slice(0, -1))
       })
     }
   }, [activeChatId, isConnected, sendViaWebSocket])
@@ -265,8 +254,13 @@ export default function ChatbotPage() {
   useEffect(() => {
     if (!streamedContent) return
     setMessages((prev) => {
-      if (!prev.length) return prev
       const last = prev[prev.length - 1]
+      // If last message is user, we need to create assistant placeholder first
+      if (!last || last.role === 'user') {
+        const assistantPlaceholder: ChatMessageType = { id: generateId(), role: 'assistant', content: streamedContent, timestamp: new Date() }
+        return [...prev, assistantPlaceholder]
+      }
+      // Update existing assistant message
       if (last.role !== 'assistant' || last.content === streamedContent) return prev
       const updated = [...prev]
       updated[updated.length - 1] = { ...last, content: streamedContent }
@@ -303,7 +297,13 @@ export default function ChatbotPage() {
 
       setMessages((prev) => {
         const last = prev[prev.length - 1]
-        if (last?.role === 'assistant' && !last.content) {
+        // If last message is user or there's no assistant message yet, create one
+        if (!last || last.role === 'user') {
+          const assistantError: ChatMessageType = { id: generateId(), role: 'assistant', content: userMessage, timestamp: new Date() }
+          return [...prev, assistantError]
+        }
+        // If last message is assistant, update it with error
+        if (last.role === 'assistant') {
           const updated = [...prev]
           updated[updated.length - 1] = { ...last, content: userMessage }
           return updated
@@ -322,8 +322,7 @@ export default function ChatbotPage() {
     }
 
     const userMsg: ChatMessageType = { id: generateId(), role: 'user', content, timestamp: new Date() }
-    const assistantPlaceholder: ChatMessageType = { id: generateId(), role: 'assistant', content: '', timestamp: new Date() }
-    setMessages((prev) => [...prev, userMsg, assistantPlaceholder])
+    setMessages((prev) => [...prev, userMsg])
     setIsTyping(true)
 
     if (!activeChatId) {
@@ -355,7 +354,7 @@ export default function ChatbotPage() {
         setIsTyping(false)
         pendingMessageRef.current = null
         waitingForConnectionRef.current = false
-        setMessages((prev) => prev.slice(0, -2))
+        setMessages((prev) => prev.slice(0, -1))
       } finally {
         setIsCreatingSession(false)
       }
@@ -368,7 +367,7 @@ export default function ChatbotPage() {
       } catch (err) {
         console.error('[ChatbotPage] sendMessage failed:', err)
         setIsTyping(false)
-        setMessages((prev) => prev.slice(0, -2))
+        setMessages((prev) => prev.slice(0, -1))
       }
     } else {
       console.warn('[ChatbotPage] WS not connected, queuing message')
@@ -380,25 +379,14 @@ export default function ChatbotPage() {
   // ─── New chat ─────────────────────────────────────────────────────────────────
 
   const handleNewChat = async () => {
-    setIsCreatingSession(true)
-    try {
-      const session = await chatService.createSession()
-      setActiveChatId(session.sessionId)
-      localStorage.setItem(ACTIVE_SESSION_KEY, session.sessionId)
-      setMessages([makeWelcome()])
-
-      const newItem = { id: session.sessionId, title: session.title || 'New Chat', time: getTimeString(new Date()), date: new Date() }
-      setChatHistory((prev) => {
-        const todaySection = prev.find(s => s.label === 'Today')
-        if (todaySection) return prev.map(s => s.label === 'Today' ? { ...s, items: [newItem, ...s.items] } : s)
-        return [{ label: 'Today', items: [newItem] }, ...prev]
-      })
-    } catch (err) {
-      console.error('[ChatbotPage] handleNewChat failed:', err)
-    } finally {
-      setIsCreatingSession(false)
-      setSidebarOpen(false)
-    }
+    // Don't create a session yet - just reset the UI for a new chat
+    setActiveChatId(null)
+    localStorage.removeItem(ACTIVE_SESSION_KEY)
+    setMessages([])
+    setIsTyping(false)
+    pendingMessageRef.current = null
+    waitingForConnectionRef.current = false
+    setSidebarOpen(false)
   }
 
   // ─── Select existing chat ─────────────────────────────────────────────────────
@@ -474,27 +462,76 @@ export default function ChatbotPage() {
             className="flex-1 overflow-y-auto"
             style={{ backgroundColor: isLight ? '#F9FAFB' : '#0F0F12', scrollbarWidth: 'thin' }}
           >
-            <div className="max-w-6xl mx-auto py-8 px-4 md:py-12 md:px-8 lg:px-12">
-              <div className="flex flex-col space-y-2">
-                {messages.length === 0 && (
-                  <div className="py-20 text-center">
-                    <div
-                      className="text-2xl font-bold mb-4"
+            <div className="max-w-6xl mx-auto px-4 md:px-8 lg:px-12 flex flex-col">
+              {messages.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 px-4">
+                  {/* Welcome Message */}
+                  <div className="text-center mb-12">
+                    <h1
+                      className="text-4xl md:text-5xl font-bold mb-4"
                       style={{ color: isLight ? '#1F2937' : '#FFFFFF' }}
                     >
-                      Welcome to Your Study Assistant
-                    </div>
-                    <div
-                      className="text-base"
+                      Good {currentHour < 12 ? 'Morning' : currentHour < 18 ? 'Afternoon' : 'Evening'}
+                    </h1>
+                    <p
+                      className="text-lg md:text-xl"
                       style={{ color: isLight ? '#6B7280' : '#A0A0A0' }}
                     >
-                      Ask anything about your studies. I'll help you prepare for your exams!
-                    </div>
+                      How can I help you with your studies today?
+                    </p>
                   </div>
-                )}
-                {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
-                <TypingIndicator isVisible={isTyping && !streamedContent} />
-              </div>
+
+                  {/* Suggested Prompts */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+                    {[
+                      {
+                        icon: '📚',
+                        title: 'Explain a Concept',
+                        prompt: 'Help me understand the concept of photosynthesis'
+                      },
+                      {
+                        icon: '✏️',
+                        title: 'Solve a Problem',
+                        prompt: 'Solve this quadratic equation: x² + 5x + 6 = 0'
+                      },
+                      {
+                        icon: '📝',
+                        title: 'Essay Help',
+                        prompt: 'Help me write an essay about the French Revolution'
+                      },
+                      {
+                        icon: '🧠',
+                        title: 'Quiz Me',
+                        prompt: 'Create a quiz question about World War II'
+                      }
+                    ].map((suggestion, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleSendMessage(suggestion.prompt)}
+                        className="p-4 rounded-lg border transition-all hover:scale-105 active:scale-95"
+                        style={{
+                          borderColor: isLight ? '#E5E7EB' : '#2D2D2D',
+                          backgroundColor: isLight ? '#F3F4F6' : '#1F1F23',
+                          color: isLight ? '#1F2937' : '#FFFFFF',
+                        }}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">{suggestion.icon}</span>
+                          <div className="text-left">
+                            <p className="font-semibold">{suggestion.title}</p>
+                            <p className="text-sm opacity-75">{suggestion.prompt}</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 flex flex-col space-y-2">
+                  {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
+                  <TypingIndicator isVisible={isTyping && !streamedContent} />
+                </div>
+              )}
             </div>
           </div>
           <ChatInput

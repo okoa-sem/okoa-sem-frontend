@@ -34,7 +34,7 @@ function buildChatWsUrl(baseUrl: string, sessionId: string, token: string): stri
 	if (explicitPath) {
 		return `${cleanBase}${explicitPath.replace(/\/$/, '')}/${sessionId}?token=${token}`;
 	}
-	return `${cleanBase}/api/v1/chat/${sessionId}?token=${token}`;
+	return `${cleanBase}/ws/chat/${sessionId}?token=${token}`;
 }
 
 function extractChunkText(message: any): string {
