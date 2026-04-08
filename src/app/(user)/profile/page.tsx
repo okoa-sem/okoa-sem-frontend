@@ -9,6 +9,7 @@ import AccountDetails from '@/features/profile/components/AccountDetails'
 import SubscriptionCard from '@/features/profile/components/SubscriptionCard'
 import PaymentPlans from '@/features/profile/components/PaymentPlans'
 import PaymentHistoryModal from '@/features/profile/components/PaymentHistoryModal'
+import SubscriptionModal from '@/features/chatbot/components/SubscriptionModal'
 import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 import { usePayments } from '@/app/providers/payments-provider/PaymentsProvider'
 
@@ -29,6 +30,8 @@ export default function MyAccountPage() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [subscription, setSubscription] = useState<UserSubscription | null>(null)
   const [showPaymentHistory, setShowPaymentHistory] = useState(false)
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
+  const [selectedPlanForModal, setSelectedPlanForModal] = useState<SubscriptionPlan | null>(null)
 
   const activeSubscription = subscriptionHistory.find(sub => sub.isActive || sub.status === 'ACTIVE')
 
@@ -98,7 +101,13 @@ export default function MyAccountPage() {
                 onViewHistory={() => setShowPaymentHistory(true)}
               />
             </div>
-            <PaymentPlans plans={subscriptionPlans} onSelectPlan={(plan) => console.log('Selected:', plan)} />
+            <PaymentPlans 
+              plans={subscriptionPlans} 
+              onSelectPlan={(plan) => {
+                setSelectedPlanForModal(plan)
+                setShowSubscriptionModal(true)
+              }} 
+            />
           </div>
         </div>
       </main>
@@ -107,6 +116,14 @@ export default function MyAccountPage() {
         onClose={() => setShowPaymentHistory(false)}
         history={subscriptionHistory}
         isLoading={isFetchingHistory}
+      />
+      <SubscriptionModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onPaymentSuccess={(plan) => {
+          setShowSubscriptionModal(false)
+        }}
+        defaultPlan={selectedPlanForModal?.id as 'daily' | 'weekly' | 'monthly' || 'monthly'}
       />
     </div>
   )

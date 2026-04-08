@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CreditCard, Lock } from 'lucide-react'
+import { CreditCard, Lock, Calendar, CalendarDays } from 'lucide-react'
 import { SubscriptionPlan } from '@/types'
 
 interface PaymentPlansProps {
@@ -14,14 +14,13 @@ export default function PaymentPlans({ plans, onSelectPlan }: PaymentPlansProps)
 
   const handleSelectPlan = (plan: SubscriptionPlan) => {
     setSelectedPlan(plan.id)
-    const confirmMessage = `Subscribe to ${plan.name} (KSh ${plan.price})?\n\nYou will be prompted to complete payment via M-Pesa.`
+    onSelectPlan?.(plan)
+  }
 
-    if (window.confirm(confirmMessage)) {
-      onSelectPlan?.(plan)
-      alert(
-        'M-Pesa Payment Flow:\n\n1. Enter your M-Pesa phone number\n2. Receive STK push notification\n3. Enter your M-Pesa PIN\n4. Confirm payment\n\nYou will be redirected after verification...'
-      )
-    }
+  const getPlanIcon = (planId: string) => {
+    if (planId === 'daily') return <Calendar className="w-5 h-5" />
+    if (planId === 'weekly') return <CalendarDays className="w-5 h-5" />
+    return <CalendarDays className="w-5 h-5" />
   }
 
   return (
@@ -54,6 +53,9 @@ export default function PaymentPlans({ plans, onSelectPlan }: PaymentPlansProps)
                   : 'border-dark-lighter bg-dark-card hover:border-primary'
               }`}
             >
+              <div className="flex justify-center mb-3 text-primary">
+                {getPlanIcon(plan.id)}
+              </div>
               <h4 className="text-lg font-bold text-white mb-2">{plan.name}</h4>
               <p className="text-primary text-2xl font-bold">
                 KSh {plan.price}

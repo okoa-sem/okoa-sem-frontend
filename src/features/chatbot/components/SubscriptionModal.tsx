@@ -16,16 +16,18 @@ interface SubscriptionModalProps {
   isOpen: boolean
   onClose: () => void
   onPaymentSuccess: (plan: SubscriptionPlan) => void
+  defaultPlan?: 'daily' | 'weekly' | 'monthly'
 }
 
 export default function SubscriptionModal({
   isOpen,
   onClose,
   onPaymentSuccess,
+  defaultPlan = 'monthly',
 }: SubscriptionModalProps) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<ModalStep>('plan-selection')
-  const [selectedPlan, setSelectedPlan] = useState<'daily' | 'weekly' | 'monthly'>('monthly')
+  const [selectedPlan, setSelectedPlan] = useState<'daily' | 'weekly' | 'monthly'>(defaultPlan)
   const [phoneNumber, setPhoneNumber] = useState('')
   const [phoneError, setPhoneError] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -235,8 +237,11 @@ export default function SubscriptionModal({
       if (paymentTimeoutRef.current) {
         clearTimeout(paymentTimeoutRef.current);
       }
+    } else {
+      // Set selected plan when modal opens with a defaultPlan
+      setSelectedPlan(defaultPlan);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultPlan]);
 
   if (!isOpen) return null
 
