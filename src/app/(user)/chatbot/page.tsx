@@ -14,6 +14,7 @@ import { useChatAccess, useSubscriptionHistory } from '@/features/payments/hooks
 import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 import { useWebSocketMessage } from '@/features/chatbot/hooks/websocket/useWebSocketMessage'
 import { chatService } from '@/features/chatbot/services/chatService'
+import { markingSchemeStorage } from '@/features/marking-schemes/utils/markingSchemeStorage'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,30 @@ export default function ChatbotPage() {
     setHasCheckedSubscription(true)
   }, [hasAccess, isCheckingAccess])
 
+  // ─── Helper: save marking scheme content to localStorage ────────────────────
+
+  const saveMarkingSchemeContent = useCallback(
+    (content: string) => {
+      if (!paperId || !paperCode || !paperTitle) return
+      const decodedCode = decodeURIComponent(paperCode)
+      const decodedTitle = decodeURIComponent(paperTitle)
+      const now = new Date().toISOString()
+
+      markingSchemeStorage.updateContent(paperId, content, {
+        // fallback used only if no entry exists yet (user opened chatbot directly)
+        id: `ms_${paperId}_session`,
+        paperId,
+        paperCode: decodedCode,
+        paperTitle: decodedTitle,
+        paperYear: 0,
+        paperSemester: 'unknown',
+        paperExamType: 'main',
+        createdAt: now,
+      })
+    },
+    [paperId, paperCode, paperTitle]
+  )
+
   // ─── Session init ────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -148,35 +173,39 @@ export default function ChatbotPage() {
     if (paperId) {
       const sessionTitle =
         paperCode && paperTitle
-          ? `${paperCode} - ${paperTitle}`
+          ? `${decodeURIComponent(paperCode)} - ${decodeURIComponent(paperTitle)}`
           : `Marking Scheme - Paper ${paperId}`
 
       setIsRestoringSession(true)
 
-      // First: look through existing sessions for one that matches this paper
       chatService
         .getAllSessions()
         .then((sessions) => {
-          // Find a session whose title matches this paper (created by GenerateMarkingSchemeModal)
+          const decodedCode = paperCode ? decodeURIComponent(paperCode) : ''
           const existing = sessions.find(
             (s) =>
               s.title === sessionTitle ||
-              // Fallback: title contains the paper code
-              (paperCode && s.title.includes(paperCode))
+              (decodedCode && s.title.includes(decodedCode))
           )
 
           if (existing) {
-            // Load the existing session — it has the marking scheme messages
             return chatService.getSessionById(existing.sessionId).then((detail) => {
               if (detail?.messages?.length) {
-                setMessages(
-                  detail.messages.map((m) => ({
-                    id: m.messageId,
-                    role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
-                    content: m.content,
-                    timestamp: new Date(m.createdAt),
-                  }))
-                )
+                const mapped = detail.messages.map((m) => ({
+                  id: m.messageId,
+                  role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+                  content: m.content,
+                  timestamp: new Date(m.createdAt),
+                }))
+                setMessages(mapped)
+
+                // ── Save AI content to localStorage as marking scheme ──────────
+                const assistantMsgs = detail.messages.filter(m => m.role === 'ASSISTANT')
+                if (assistantMsgs.length > 0) {
+                  // Use all assistant messages joined — captures full marking scheme
+                  const content = assistantMsgs.map(m => m.content).join('\n\n')
+                  saveMarkingSchemeContent(content)
+                }
               } else {
                 setMessages([makeWelcome()])
               }
@@ -185,7 +214,7 @@ export default function ChatbotPage() {
             })
           }
 
-          // No existing session found — create a new contextual one
+          // No existing session — create a new contextual one
           return chatService
             .createSessionWithContext(sessionTitle, paperId)
             .then((newSession) => {
@@ -255,7 +284,7 @@ export default function ChatbotPage() {
       .finally(() => {
         setIsRestoringSession(false)
       })
-  }, [hasCheckedSubscription, paperId])
+  }, [hasCheckedSubscription, paperId, saveMarkingSchemeContent])
 
   // ─── Persist activeChatId ────────────────────────────────────────────────────
 
@@ -349,8 +378,13 @@ export default function ChatbotPage() {
     if (fullResponse && !isLoading) {
       setIsTyping(false)
       loadSessions()
+
+      // ── If this is a paper/marking-scheme session, persist AI content ─────────
+      if (paperId && fullResponse.aiResponse?.content) {
+        saveMarkingSchemeContent(fullResponse.aiResponse.content)
+      }
     }
-  }, [fullResponse, isLoading])
+  }, [fullResponse, isLoading, paperId, saveMarkingSchemeContent])
 
   // ─── WebSocket error handling ─────────────────────────────────────────────────
 

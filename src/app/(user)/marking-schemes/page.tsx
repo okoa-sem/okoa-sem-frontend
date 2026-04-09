@@ -1,47 +1,61 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
-import { MarkingScheme } from '@/types'
+import { useState, useCallback } from 'react'
 import CompactHeader from '@/shared/components/CompactHeader'
 import MarkingSchemeHistory from '@/features/marking-schemes/components/MarkingSchemeHistory'
 import MarkingSchemeDetail from '@/features/marking-schemes/components/MarkingSchemeDetail'
 import { useMarkingSchemes, useDeleteMarkingScheme } from '@/features/marking-schemes/hooks'
-import { ArrowLeft, AlertCircle } from 'lucide-react'
+import { MarkingScheme } from '@/types'
+import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
 export default function MarkingSchemesPage() {
   const [selectedScheme, setSelectedScheme] = useState<MarkingScheme | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
 
-  // Fetch marking schemes from backend with error handling
-  const { data: apiSchemes = [], isLoading, isError, error } = useMarkingSchemes()
+  // Read from localStorage via updated hook
+  const { data: localSchemes = [], isLoading } = useMarkingSchemes()
   const deleteMarkingScheme = useDeleteMarkingScheme()
 
-  // Transform API schemes to MarkingScheme type
-  const markingSchemes = useMemo(() => {
-    return apiSchemes.map(scheme => ({
-      id: scheme.id,
-      userId: 'current-user',
-      paperId: scheme.examPaperId.toString(),
-      paper: undefined,
-      content: scheme.content,
-      createdAt: new Date(scheme.createdAt),
-      updatedAt: new Date(scheme.updatedAt),
-    } as MarkingScheme))
-  }, [apiSchemes])
+  // Map LocalMarkingScheme → MarkingScheme (used by existing UI components)
+  const markingSchemes: MarkingScheme[] = localSchemes.map((s) => ({
+    id: s.id,
+    userId: 'current-user',
+    paperId: s.paperId,
+    paper: {
+      id: s.paperId,
+      title: `${s.paperCode} - ${s.paperTitle}`,
+      courseCode: s.paperCode,
+      courseName: s.paperTitle,
+      school: '',
+      year: s.paperYear,
+      semester: s.paperSemester as 'first' | 'second' | 'unknown',
+      examType: s.paperExamType as 'main' | 'supplementary' | 'special' | 'cat',
+      fileUrl: '',
+      fileSize: 0,
+      uploadedAt: new Date(s.createdAt),
+      downloads: 0,
+    },
+    content: s.content,
+    createdAt: new Date(s.createdAt),
+    updatedAt: new Date(s.updatedAt),
+  }))
 
   const handleViewDetail = useCallback((scheme: MarkingScheme) => {
     setSelectedScheme(scheme)
     setIsDetailOpen(true)
   }, [])
 
-  const handleDeleteScheme = useCallback(async (id: string) => {
-    try {
-      await deleteMarkingScheme.mutateAsync(id)
-    } catch (err) {
-      console.error('Failed to delete marking scheme:', err)
-    }
-  }, [deleteMarkingScheme])
+  const handleDeleteScheme = useCallback(
+    async (id: string) => {
+      try {
+        await deleteMarkingScheme.mutateAsync(id)
+      } catch (err) {
+        console.error('Failed to delete marking scheme:', err)
+      }
+    },
+    [deleteMarkingScheme]
+  )
 
   const handleCloseDetail = useCallback(() => {
     setIsDetailOpen(false)
@@ -50,22 +64,20 @@ export default function MarkingSchemesPage() {
 
   return (
     <div className="min-h-screen bg-dark flex flex-col">
-      {/* Navigation Header */}
       <CompactHeader />
-      
-      {/* Main Content */}
+
       <main className="flex-1">
         <div className="max-w-[1400px] mx-auto px-4 md:px-[5%] py-8">
           {/* Page Header */}
           <div className="mb-8">
-            <Link 
-              href="/past-papers" 
+            <Link
+              href="/past-papers"
               className="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors mb-4"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Past Papers</span>
             </Link>
-            
+
             <div className="text-center">
               <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
                 My <span className="text-primary">Marking Schemes</span>
@@ -84,28 +96,12 @@ export default function MarkingSchemesPage() {
                 <p className="text-text-gray">Loading your marking schemes...</p>
               </div>
             </div>
-          ) : isError ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center max-w-md">
-                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <p className="text-text-gray text-lg mb-4">Unable to load marking schemes</p>
-                <p className="text-text-gray text-sm mb-6">
-                  {error instanceof Error ? error.message : 'There was an error fetching your marking schemes. Please try again later.'}
-                </p>
-                <Link 
-                  href="/past-papers" 
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors"
-                >
-                  Back to Past Papers
-                </Link>
-              </div>
-            </div>
           ) : markingSchemes.length === 0 ? (
             <div className="flex items-center justify-center py-20">
               <div className="text-center">
                 <p className="text-text-gray text-lg mb-4">No marking schemes generated yet</p>
-                <Link 
-                  href="/past-papers" 
+                <Link
+                  href="/past-papers"
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors"
                 >
                   Generate Now
@@ -122,7 +118,6 @@ export default function MarkingSchemesPage() {
         </div>
       </main>
 
-      {/* Detail Modal */}
       <MarkingSchemeDetail
         scheme={selectedScheme}
         isOpen={isDetailOpen}

@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Loader, Check, AlertCircle, MessageCircle, RefreshCw } from 'lucide-react'
 import { PastPaper, MarkingScheme } from '@/types'
-import { useGenerateMarkingScheme } from '@/features/marking-schemes/hooks'
 import Link from 'next/link'
 import { httpClient } from '@/core/http/client'
 import { MarkingSchemeContent, MarkingSchemeStatusData } from '@/features/marking-schemes/types'
+import { markingSchemeStorage } from '@/features/marking-schemes/utils/markingSchemeStorage'
 
 interface GenerateMarkingSchemeModalProps {
   paper: PastPaper | null
@@ -18,8 +18,6 @@ interface GenerateMarkingSchemeModalProps {
 type ModalState = 'idle' | 'starting' | 'waiting' | 'success' | 'error'
 
 const POLL_INTERVAL_MS = 4000
-// After generation starts, poll for up to ~60s; if still 500 we declare success anyway
-// because the generate endpoint already confirmed GENERATION_STARTED.
 const MAX_BACKGROUND_POLLS = 15
 
 export default function GenerateMarkingSchemeModal({
@@ -35,7 +33,29 @@ export default function GenerateMarkingSchemeModal({
   const pollCountRef = useRef(0)
   const activeRef = useRef(false)
 
-  const generateMutation = useGenerateMarkingScheme()
+  // ─── Save to localStorage ─────────────────────────────────────────────────
+
+  const saveToLocalStorage = useCallback(
+    (content: string) => {
+      if (!paper) return
+      const now = new Date().toISOString()
+      markingSchemeStorage.save({
+        id: `ms_${paper.id}_${Date.now()}`,
+        paperId: paper.id,
+        paperCode: paper.courseCode,
+        paperTitle: paper.courseName,
+        paperYear: paper.year,
+        paperSemester: paper.semester,
+        paperExamType: paper.examType,
+        content,
+        createdAt: now,
+        updatedAt: now,
+      })
+    },
+    [paper]
+  )
+
+  // ─── Cleanup ──────────────────────────────────────────────────────────────
 
   const stopPolling = useCallback(() => {
     activeRef.current = false
@@ -45,7 +65,6 @@ export default function GenerateMarkingSchemeModal({
     }
   }, [])
 
-  // Reset on close
   useEffect(() => {
     if (!isOpen) {
       stopPolling()
@@ -59,30 +78,39 @@ export default function GenerateMarkingSchemeModal({
     return () => stopPolling()
   }, [stopPolling])
 
+  // ─── Success handler ──────────────────────────────────────────────────────
+
   const markSuccess = useCallback(
     (scheme?: MarkingSchemeContent) => {
       stopPolling()
-      if (scheme && paper) {
-        const markingScheme: MarkingScheme = {
-          id: scheme.id,
-          userId: 'current-user',
-          paperId: paper.id,
-          paper,
-          content: scheme.content,
-          createdAt: new Date(scheme.createdAt),
-          updatedAt: new Date(scheme.updatedAt),
+
+      if (paper) {
+        // Always save to localStorage with whatever content we have
+        const content = scheme?.content || ''
+        saveToLocalStorage(content)
+
+        // Also call onGenerate for any parent-level side effects
+        if (scheme) {
+          const markingScheme: MarkingScheme = {
+            id: scheme.id,
+            userId: 'current-user',
+            paperId: paper.id,
+            paper,
+            content: scheme.content,
+            createdAt: new Date(scheme.createdAt),
+            updatedAt: new Date(scheme.updatedAt),
+          }
+          onGenerate(paper, markingScheme).catch(() => {})
         }
-        // Best-effort local save — don't block success on this
-        onGenerate(paper, markingScheme).catch(() => {})
       }
+
       setModalState('success')
     },
-    [paper, onGenerate, stopPolling]
+    [paper, onGenerate, stopPolling, saveToLocalStorage]
   )
 
-  // Background polling — tries status, then list as fallback.
-  // Both endpoints currently return 500 on web so after MAX_BACKGROUND_POLLS
-  // we declare success because generate already confirmed GENERATION_STARTED.
+  // ─── Background polling ───────────────────────────────────────────────────
+
   const startBackgroundPolling = useCallback(
     (sid: string) => {
       activeRef.current = true
@@ -111,10 +139,10 @@ export default function GenerateMarkingSchemeModal({
             return
           }
         } catch {
-          // 500 — ignore and keep polling
+          // 500 — continue polling
         }
 
-        // Every 3 polls try the list endpoint as fallback
+        // Every 3 polls, try the list endpoint as fallback
         if (pollCountRef.current % 3 === 0 && paper) {
           try {
             const res = await httpClient.get<{
@@ -132,11 +160,11 @@ export default function GenerateMarkingSchemeModal({
               return
             }
           } catch {
-            // 500 — ignore
+            // 500 — continue
           }
         }
 
-        // Timed out but generation was confirmed started — show success anyway
+        // Timed out — generation was confirmed started, so show success
         if (pollCountRef.current >= MAX_BACKGROUND_POLLS) {
           markSuccess()
           return
@@ -147,11 +175,12 @@ export default function GenerateMarkingSchemeModal({
         }
       }
 
-      // First poll after 3s to give backend time to begin processing
       pollTimerRef.current = setTimeout(poll, 3000)
     },
     [paper, markSuccess, stopPolling]
   )
+
+  // ─── Trigger generation ───────────────────────────────────────────────────
 
   const handleGenerate = async () => {
     if (!paper) return
@@ -161,16 +190,23 @@ export default function GenerateMarkingSchemeModal({
     try {
       const paperIdNum =
         typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
-      const result = await generateMutation.mutateAsync(paperIdNum)
 
-      // Backend confirmed generation started — that's our success signal on web
-      // since status/list endpoints both return 500 and can't be relied on.
-      // Start background polling anyway in case those endpoints get fixed.
+      const res = await httpClient.post<{
+        success: boolean
+        data: {
+          sessionId: string
+          examPaperId: number
+          status: string
+          message: string
+          generatedMarkingScheme: MarkingSchemeContent | null
+        }
+      }>('/marking-schemes/generate', { examPaperId: paperIdNum })
+
+      const result = res.data.data
+
       if (result.status === 'COMPLETED' && result.generatedMarkingScheme) {
-        // Synchronous completion (unlikely but handle it)
         markSuccess(result.generatedMarkingScheme)
       } else {
-        // GENERATION_STARTED — show waiting UI and poll in background
         setModalState('waiting')
         startBackgroundPolling(result.sessionId)
       }
@@ -181,6 +217,8 @@ export default function GenerateMarkingSchemeModal({
       setModalState('error')
     }
   }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   if (!isOpen || !paper) return null
 
@@ -210,7 +248,7 @@ export default function GenerateMarkingSchemeModal({
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Paper info — always visible */}
+          {/* Paper info */}
           <div className="space-y-1">
             <p className="text-sm text-text-gray">Exam Paper</p>
             <p className="text-lg font-semibold text-white">{paper.courseCode}</p>
@@ -241,7 +279,10 @@ export default function GenerateMarkingSchemeModal({
                 </div>
               </div>
               <div className="w-full h-1.5 bg-dark rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: '75%' }} />
+                <div
+                  className="h-full bg-primary rounded-full animate-pulse"
+                  style={{ width: '75%' }}
+                />
               </div>
               <p className="text-xs text-center text-text-gray">
                 Please keep this window open…
@@ -259,8 +300,8 @@ export default function GenerateMarkingSchemeModal({
                 <div>
                   <p className="font-semibold text-white">Marking Scheme Ready!</p>
                   <p className="text-xs text-text-gray mt-1">
-                    Your marking scheme has been generated. View it in the chatbot or under{' '}
-                    <strong className="text-white">My Marking Schemes</strong>.
+                    Saved to <strong className="text-white">My Marking Schemes</strong>. View it
+                    there or continue in the chatbot.
                   </p>
                 </div>
               </div>
@@ -278,7 +319,6 @@ export default function GenerateMarkingSchemeModal({
 
         {/* Footer */}
         <div className="border-t border-dark-lighter px-6 py-4">
-          {/* Idle */}
           {modalState === 'idle' && (
             <div className="flex gap-3">
               <button
@@ -296,14 +336,12 @@ export default function GenerateMarkingSchemeModal({
             </div>
           )}
 
-          {/* Starting — no button while awaiting the API */}
           {modalState === 'starting' && (
             <div className="flex justify-center py-1">
               <span className="text-xs text-text-gray">Please wait…</span>
             </div>
           )}
 
-          {/* Waiting — allow dismissing to background */}
           {modalState === 'waiting' && (
             <button
               onClick={onClose}
@@ -313,7 +351,6 @@ export default function GenerateMarkingSchemeModal({
             </button>
           )}
 
-          {/* Success */}
           {modalState === 'success' && (
             <div className="flex gap-3">
               <button
@@ -333,7 +370,6 @@ export default function GenerateMarkingSchemeModal({
             </div>
           )}
 
-          {/* Error */}
           {modalState === 'error' && (
             <div className="flex gap-3">
               <button

@@ -103,6 +103,18 @@ export const signInWithGoogle = async () => {
     const credential = GoogleAuthProvider.credentialFromResult(result)
     const token = credential?.idToken
 
+    console.log('Firebase Google auth result:', {
+      userEmail: result.user.email,
+      uid: result.user.uid,
+      credentialExists: !!credential,
+      tokenExists: !!token,
+      tokenLength: token?.length,
+    })
+
+    if (!token) {
+      console.warn('Warning: idToken is null/undefined from credential')
+    }
+
     return {
       user: result.user,
       idToken: token,

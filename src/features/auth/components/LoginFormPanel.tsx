@@ -84,8 +84,8 @@ export default function LoginFormPanel() {
       const response = await signInWithGoogleAuth()
 
       // Store tokens and user data
-      authLogin(response.user, response.accessToken)
-      localStorage.setItem('refreshToken', response.refreshToken)
+      authLogin(response.data.user, response.data.accessToken)
+      localStorage.setItem('refreshToken', response.data.refreshToken)
 
       // Redirect
       const nextParam = searchParams.get('next')

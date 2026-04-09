@@ -6,14 +6,18 @@ import { User } from '@/features/auth/types'
 
 export interface GoogleAuthRequest {
   idToken: string
-  email: string
-  displayName?: string
 }
 
 export interface GoogleAuthResponse {
-  user: User
-  accessToken: string
-  refreshToken: string
+  success: boolean
+  message: string
+  data: {
+    user: User
+    accessToken: string
+    refreshToken: string
+    tokenType: string
+    expiresIn: number
+  }
 }
 
 export const signInWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
@@ -21,23 +25,40 @@ export const signInWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
     // Step 1: Authenticate with Firebase
     const { user, idToken } = await signInWithGoogle()
 
+    console.log('Firebase Google sign-in successful:', {
+      email: user.email,
+      uid: user.uid,
+      hasIdToken: !!idToken,
+      idTokenLength: idToken?.length,
+    })
+
     if (!idToken) {
-      throw new Error('Failed to get Google ID token')
+      throw new Error('Failed to get Google ID token from Firebase')
     }
 
     // Step 2: Send to backend for verification and account creation/linking
+    console.log('Sending to backend:', {
+      url: '/auth/google',
+      hasIdToken: !!idToken,
+      email: user.email,
+    })
+
     const response = await httpClient.post<GoogleAuthResponse>(
-      '/auth/google-signin',
+      '/auth/google',
       {
         idToken,
-        email: user.email,
-        displayName: user.displayName,
       } as GoogleAuthRequest
     )
 
+    console.log('Backend response successful:', response.status)
     return response.data
   } catch (error: any) {
-    console.error('Google sign-in failed:', error)
+    console.error('Google sign-in failed:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+    })
     throw error
   }
 }
@@ -57,11 +78,9 @@ export const signUpWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
 
     // Step 2: Send to backend for account creation
     const response = await httpClient.post<GoogleAuthResponse>(
-      '/auth/google-signup',
+      '/auth/google',
       {
         idToken,
-        email: user.email,
-        displayName: user.displayName,
       } as GoogleAuthRequest
     )
 

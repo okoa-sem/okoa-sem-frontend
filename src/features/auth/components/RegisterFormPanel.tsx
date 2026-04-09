@@ -79,8 +79,8 @@ export default function RegisterFormPanel() {
       const response = await signUpWithGoogleAuth()
 
       // Store tokens and user data
-      authLogin(response.user, response.accessToken)
-      localStorage.setItem('refreshToken', response.refreshToken)
+      authLogin(response.data.user, response.data.accessToken)
+      localStorage.setItem('refreshToken', response.data.refreshToken)
 
       // Redirect to home
       router.push('/')
