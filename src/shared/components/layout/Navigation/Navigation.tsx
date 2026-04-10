@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, User } from 'lucide-react'
+import Image from 'next/image'
 import ThemeToggle from '@/shared/components/ThemeToggle'
 import { ROUTES } from '@/shared/constants'
 import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
@@ -91,9 +92,13 @@ export default function Navigation() {
           <div className="flex items-center justify-between h-16 md:h-18">
             {/* Logo */}
             <Link href={ROUTES.HOME} className="flex items-center gap-2.5 group z-[101]">
-              <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center font-bold text-dark text-sm group-hover:scale-105 transition-transform">
-                OS
-              </div>
+              <Image 
+                src="/okoa-logo.png"
+                alt="Okoa Sem Logo" 
+                width={40} 
+                height={40}
+                className="group-hover:scale-105 transition-transform"
+              />
               <span className={`font-semibold text-lg hidden sm:block ${isLight ? 'text-gray-900' : 'text-white'}`}>
                 Okoa Sem
               </span>

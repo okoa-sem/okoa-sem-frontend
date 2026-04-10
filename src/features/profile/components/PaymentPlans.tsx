@@ -37,7 +37,7 @@ export default function PaymentPlans({ plans, onSelectPlan }: PaymentPlansProps)
           </div>
           <div>
             <h3 className="text-xl font-bold text-white">Subscribe Now</h3>
-            <p className="text-text-gray text-sm">Select a plan and pay securely via M-Pesa</p>
+            <p className="text-text-gray text-sm">Select a plan and pay securely via PayHero</p>
           </div>
         </div>
 
@@ -68,7 +68,7 @@ export default function PaymentPlans({ plans, onSelectPlan }: PaymentPlansProps)
         {/* Security Badge */}
         <div className="flex items-center justify-center gap-2 pt-6 border-t border-dark-lighter text-text-gray text-sm">
           <Lock className="w-4 h-4" />
-          <span>Secure M-Pesa payments powered by Safaricom</span>
+          <span>Secure payments powered by PayHero</span>
         </div>
       </div>
     </div>

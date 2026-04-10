@@ -1,45 +1,45 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, Mail } from 'lucide-react'
+import { ChevronDown, Mail, MessageCircle } from 'lucide-react'
 import Link from 'next/link'
 
 const faqs = [
   {
     question: 'How do I make payments?',
-    answer: 'We accept M-Pesa, credit/debit cards, and PayPal. Simply choose your preferred plan, select your payment method, and follow the secure checkout process. All transactions are encrypted and secure.',
+    answer: 'Simply choose your preferred plan and you will be prompted to complete the payment through PayHero. All transactions are encrypted and secure.',
   },
   {
     question: 'How many past papers are available?',
-    answer: 'We have over 24,000+ past papers from 8 major Kenyan universities, covering 50+ departments. Our collection is continuously updated with new papers every semester.',
+    answer: 'We have over 24,000+ past papers covering 8 schoools. Our collection is continuously updated with new papers every semester.',
   },
   {
     question: 'What can the AI Study Bot do?',
-    answer: 'Our AI Study Bot can explain complex concepts, help you solve problems step-by-step, generate practice questions, summarize notes, and provide personalized study recommendations based on your learning patterns.',
+    answer: 'Our AI Study Bot can explain complex concepts, help you solve problems step-by-step, generate practice questions, and summarize notes to aid your exam preparation.',
   },
   {
-    question: 'Can I download papers for offline use?',
-    answer: 'Yes! Premium subscribers can download unlimited papers in PDF format for offline studying. Free users can download up to 5 papers per month.',
+    question: 'Can I download papers?',
+    answer: 'Currently, we offer online viewing of all past papers through our platform. Papers can be viewed directly in your browser across all devices. We\'re working on offline access features for future releases.',
   },
   {
-    question: 'Which schools and departments are covered?',
-    answer: 'We cover all major Kenyan universities including UoN, KU, JKUAT, Moi, Egerton, Maseno, MMUST, and TUK. Departments include Engineering, Business, Medicine, Law, Education, IT, and many more.',
+    question: 'What features do the different plans include?',
+    answer: 'Daily Plan: 24-hour access with basic AI assistance. Weekly Plan: 7-day access with premium AI Study Bot. Monthly Plan: 30-day access with all premium features including priority support. All plans include unlimited paper access, smart search, and online viewing.',
   },
   {
-    question: 'How does the Notes to Questions feature work?',
-    answer: 'Upload your lecture notes or study materials, and our AI will automatically generate relevant exam-style questions. This helps you test your understanding and prepare for actual exams.',
+    question: 'How does the AI Study Bot help me prepare?',
+    answer: 'The AI Study Bot provides step-by-step explanations of complex topics, generates practice questions from past papers, and summarizes study materials to help you prepare effectively for exams.',
   },
   {
-    question: 'Can I study with friends?',
-    answer: 'Absolutely! Create or join study groups, share papers and notes, discuss questions in real-time, and track group progress together. Collaborative learning made easy.',
+    question: 'Can I access papers on mobile devices?',
+    answer: 'Absolutely! Okoa Sem is fully responsive and works beautifully on all devices including phones, tablets, and laptops. We also have dedicated  Android app for the best mobile experience.',
   },
   {
     question: 'What happens when my subscription expires?',
-    answer: 'You\'ll retain access to your downloaded papers and study history. You can continue using free features, but premium features like unlimited downloads and AI assistance will be limited until you renew.',
+    answer: 'You\'ll retain access to your study history and previous notes. You can continue using basic features, but premium features like unlimited paper access and AI assistance will be limited until you renew.',
   },
   {
-    question: 'Is Okoa Sem mobile-friendly?',
-    answer: 'Yes! Okoa Sem is fully responsive and works beautifully on all devices. We also have dedicated iOS and Android apps for the best mobile experience.',
+    question: 'How often is the paper collection updated?',
+    answer: 'We update our collection every semester with newly released past papers. Our team continuously works to ensure you have access to the most recent exam papers for effective preparation.',
   },
   {
     question: 'Is my personal information secure?',
@@ -207,13 +207,15 @@ export default function FAQSection() {
               </p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link
-                  href="/contact"
+                <a
+                  href="https://wa.me/254792036343"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-white font-semibold rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all duration-300 hover:-translate-y-1 hover:bg-primary-dark"
                 >
-                  <Mail className="w-5 h-5" />
+                  <MessageCircle className="w-5 h-5" />
                   Contact Support
-                </Link>
+                </a>
                 
                 <Link
                   href="/chatbot"

@@ -1,17 +1,34 @@
 import { useQuery } from '@tanstack/react-query';
 import { papersService } from '../services/papersService';
+import { SCHOOLS } from '@/shared/constants';
 
 export const useSchoolNames = () => {
   return useQuery({
     queryKey: ['schoolNames'],
-    queryFn: papersService.getSchoolNames,
+    queryFn: async () => {
+      try {
+        return await papersService.getSchoolNames();
+      } catch (error) {
+        // Fallback to static school names if backend fetch fails
+        console.warn('Failed to fetch school names from backend, using fallback data');
+        return SCHOOLS.map(school => school.name);
+      }
+    },
   });
 };
 
 export const useSchoolCodes = () => {
   return useQuery({
     queryKey: ['schoolCodes'],
-    queryFn: papersService.getSchoolCodes,
+    queryFn: async () => {
+      try {
+        return await papersService.getSchoolCodes();
+      } catch (error) {
+        // Fallback to static school codes if backend fetch fails
+        console.warn('Failed to fetch school codes from backend, using fallback data');
+        return SCHOOLS.map(school => school.id);
+      }
+    },
   });
 };
 

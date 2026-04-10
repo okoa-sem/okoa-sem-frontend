@@ -60,7 +60,9 @@ export default function SchoolsSection() {
     });
   }, [schoolCodes, schoolNames]);
 
+  // Show loading skeleton only if data hasn't loaded yet and we're still loading
   const isLoading = isLoadingCodes || isLoadingNames;
+  const hasData = schoolCodes && schoolNames && schoolCodes.length > 0 && schoolNames.length > 0;
 
   return (
     <section 
@@ -82,7 +84,7 @@ export default function SchoolsSection() {
         </div>
 
         {/* Schools Grid */}
-        {isLoading ? (
+        {!hasData && isLoading ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {[...Array(8)].map((_, i) => (
               <div 

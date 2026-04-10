@@ -13,8 +13,22 @@ const plans = [
     features: [
       'Access all past papers',
       'Smart topic search',
-      'Download PDFs',
+      'View PDFs online',
       'Basic AI assistance',
+    ],
+    popular: false,
+  },
+  {
+    id: 'weekly',
+    name: PRICING.WEEKLY.name,
+    price: PRICING.WEEKLY.amount,
+    duration: '7 days access',
+    features: [
+      'Unlimited past papers access',
+      'Smart topic search',
+      'View PDFs online',
+      'AI Study Bot',
+      'Extended study session',
     ],
     popular: false,
   },
@@ -26,9 +40,9 @@ const plans = [
     features: [
       'Unlimited past papers access',
       'Premium AI Study Bot',
-      'Notes to questions generator',
-      'Study groups & collaboration',
-      'Offline downloads',
+      'Smart topic search',
+      'View PDFs online',
+      'Extended study sessions',
       'Priority support',
     ],
     popular: true,
@@ -66,7 +80,7 @@ export default function PricingSection() {
         background: isLight ? '#E0F2F1' : '#1A1A1A',
       }}
     >
-      <div className="container-custom max-w-5xl">
+      <div className="container-custom max-w-6xl">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-4xl md:text-5xl font-bold mb-4">
@@ -78,7 +92,7 @@ export default function PricingSection() {
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 gap-8 mb-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
           {plans.map((plan) => (
             <div
               key={plan.id}
@@ -139,7 +153,7 @@ export default function PricingSection() {
         {/* Payment Info */}
         <div className="text-center">
           <p className="text-text-gray">
-            Secure payment via <span className="text-primary font-semibold">M-Pesa</span>
+            Secure payment via <span className="text-primary font-semibold">PayHero</span>
           </p>
         </div>
       </div>
