@@ -102,44 +102,48 @@ export default function SchoolsSection() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {schools.map((school, index) => (
-              <div
+              <Link
                 key={school.id}
-                className="bg-dark border border-dark-lighter rounded-2xl p-6 transition-all hover:-translate-y-2 hover:border-primary cursor-pointer"
-                style={{ animationDelay: `${index * 100}ms` }}
+                href={`${ROUTES.PAST_PAPERS}?school=${school.id}`}
+                className="block"
               >
-                {/* School Header */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold ${
-                      colorClasses[school.color as keyof typeof colorClasses]
-                    }`}
-                  >
-                    {school.abbreviation.slice(0, 2)}
+                <div
+                  className="bg-dark border border-dark-lighter rounded-2xl p-6 transition-all hover:-translate-y-2 hover:border-primary cursor-pointer h-full"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  {/* School Header */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold ${
+                        colorClasses[school.color as keyof typeof colorClasses]
+                      }`}
+                    >
+                      {school.abbreviation.slice(0, 2)}
+                    </div>
+                    <div className="text-sm font-bold text-text-gray uppercase">
+                      {school.abbreviation}
+                    </div>
                   </div>
-                  <div className="text-sm font-bold text-text-gray uppercase">
-                    {school.abbreviation}
+
+                  {/* School Info */}
+                  <h3 className="text-lg font-bold mb-2 line-clamp-2">
+                    {school.name}
+                  </h3>
+                  <p className="text-sm text-text-gray mb-4 line-clamp-2">
+                    {school.description}
+                  </p>
+
+                  {/* Browse Button */}
+                  <div
+                    className="w-full flex items-center justify-between px-4 py-3 bg-transparent border border-dark-lighter rounded-lg text-sm font-medium transition-all hover:bg-primary hover:text-dark hover:border-primary pointer-events-none"
+                  >
+                    <span>Browse Papers</span>
+                    <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-semibold">
+                      PDF
+                    </span>
                   </div>
                 </div>
-
-                {/* School Info */}
-                <h3 className="text-lg font-bold mb-2 line-clamp-2">
-                  {school.name}
-                </h3>
-                <p className="text-sm text-text-gray mb-4 line-clamp-2">
-                  {school.description}
-                </p>
-
-                {/* Browse Button */}
-                <Link
-                  href={`${ROUTES.PAST_PAPERS}?school=${school.id}`}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-transparent border border-dark-lighter rounded-lg text-sm font-medium transition-all hover:bg-primary hover:text-dark hover:border-primary"
-                >
-                  <span>Browse Papers</span>
-                  <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-semibold">
-                    PDF
-                  </span>
-                </Link>
-              </div>
+              </Link>
             ))}
           </div>
         )}

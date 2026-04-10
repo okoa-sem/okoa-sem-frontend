@@ -18,6 +18,7 @@ export default function LoginFormPanel() {
   const searchParams = useSearchParams()
   const [step, setStep] = useState<LoginStep>('CREDENTIALS')
   const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { login: authLogin } = useAuth()
   const [tempEmail, setTempEmail] = useState('')
@@ -78,7 +79,7 @@ export default function LoginFormPanel() {
 
   // Handle Google Sign-In
   const handleGoogleSignIn = async () => {
-    setIsLoading(true)
+    setIsGoogleLoading(true)
     setError(null)
     try {
       const response = await signInWithGoogleAuth()
@@ -96,7 +97,7 @@ export default function LoginFormPanel() {
       console.error('Google sign-in error:', error)
       setError(error.response?.data?.message || error.message || 'Google sign-in failed. Please try again.')
     } finally {
-      setIsLoading(false)
+      setIsGoogleLoading(false)
     }
   }
 
@@ -123,7 +124,7 @@ export default function LoginFormPanel() {
       {step === 'CREDENTIALS' ? (
         <>
           <div className="mb-4">
-            <EmailPasswordForm onSubmit={handleLogin} isLoading={isLoading} />
+            <EmailPasswordForm onSubmit={handleLogin} isLoading={isLoading && !isGoogleLoading} />
           </div>
 
           <div className="relative my-5">
@@ -138,8 +139,8 @@ export default function LoginFormPanel() {
           <div className="mb-5">
             <GoogleSignInButton 
               onClick={handleGoogleSignIn} 
-              isLoading={isLoading}
-              disabled={isLoading}
+              isLoading={isGoogleLoading}
+              disabled={isGoogleLoading || isLoading}
             />
           </div>
 
