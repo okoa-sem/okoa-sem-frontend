@@ -40,15 +40,33 @@ export const PaymentProvider = ({
     const { isAuthenticated } = useAuth();
     const queryClient = useQueryClient();
     
+    // Also check for authToken in localStorage to ensure token is actually available
+    // This prevents queries from running before Google OAuth token is cached
+    const [hasAuthToken, setHasAuthToken] = useState(false);
+    
+    useEffect(() => {
+      const checkToken = () => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+        setHasAuthToken(!!token);
+      };
+      
+      checkToken();
+      
+      // Listen for storage changes (for token updates from other tabs/windows)
+      window.addEventListener('storage', checkToken);
+      return () => window.removeEventListener('storage', checkToken);
+    }, []);
+    
     const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
     const [lastPaymentMessage, setLastPaymentMessage] = useState<WebSocketMessage | null>(null);
     const webSocketRef = useRef<PaymentWebSocket | null>(null);
 
+    // Only enable queries when both authenticated AND have a token
     const {
         websocketStatus,
         subscriptionHistory,
         chatAccess
-    } = usePaymentQueries({ enabled: isAuthenticated });
+    } = usePaymentQueries({ enabled: isAuthenticated && hasAuthToken });
 
     const connectWebSocket = useCallback((token: string) => {
         if (webSocketRef.current) {

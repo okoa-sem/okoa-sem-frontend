@@ -99,6 +99,22 @@ export default function ChatbotPage() {
   const { data: subscriptionHistory = [] } = useSubscriptionHistory()
   const activeSubscription = subscriptionHistory.find(s => s.isActive || s.status === 'ACTIVE')
 
+  // Initialize from localStorage cache immediately so the spinner never blocks
+  // on the subscription check (which is already pre-fetched by PaymentProvider
+  // on client-side navigations when isAuthenticated = true).
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEYS.SUBSCRIPTION)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (new Date(parsed.expiresAt) > new Date()) {
+          setSubscription({ isActive: true })
+        }
+      }
+    } catch {}
+    setHasCheckedSubscription(true)
+  }, [])
+
   useEffect(() => {
     if (isCheckingAccess) return
 
@@ -160,14 +176,18 @@ export default function ChatbotPage() {
   useEffect(() => {
     if (!hasCheckedSubscription) return
     if (restoreTriggeredRef.current) return
-    restoreTriggeredRef.current = true
 
     const isSubscribed = subscription.isActive
 
     if (!isSubscribed) {
+      // Don't set restoreTriggeredRef here — allow this effect to re-run when
+      // subscription.isActive becomes true (e.g. after the API check completes
+      // for users who navigate client-side while already authenticated).
       setMessages([makeWelcome()])
       return
     }
+
+    restoreTriggeredRef.current = true
 
     // ── Coming from "View in Chatbot" after marking scheme generation ──────────
     if (paperId) {
@@ -284,7 +304,7 @@ export default function ChatbotPage() {
       .finally(() => {
         setIsRestoringSession(false)
       })
-  }, [hasCheckedSubscription, paperId, saveMarkingSchemeContent])
+  }, [hasCheckedSubscription, subscription.isActive, paperId, saveMarkingSchemeContent])
 
   // ─── Persist activeChatId ────────────────────────────────────────────────────
 

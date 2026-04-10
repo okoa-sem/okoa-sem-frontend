@@ -25,11 +25,16 @@ const authRequestInterceptor = async (config: InternalAxiosRequestConfig) => {
     // First, try to use the cached authToken (most common case)
     let token = localStorage.getItem('authToken')
 
-    // If no cached token, try Firebase token (async operation)
-    // Firebase tokens are cached internally for up to 1 hour
+   
     if (!token) {
       try {
         token = await getFirebaseIdToken()
+        
+        // If Firebase token obtained, cache it in localStorage for subsequent requests
+        if (token) {
+          localStorage.setItem('authToken', token)
+          console.log('[HTTP] Obtained Firebase ID token and cached in localStorage')
+        }
       } catch (error) {
         console.warn('Failed to get Firebase ID token:', error)
       }
