@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  // 1. Transpile react-pdf to handle ESM and internal dependencies
+  transpilePackages: ['react-pdf'],
+
   headers: async () => {
     return [
       {
@@ -13,6 +15,12 @@ const nextConfig = {
         ],
       },
     ]
+  },
+
+  // 2. Instruct Webpack to ignore the 'canvas' module
+  webpack: (config) => {
+    config.resolve.alias.canvas = false;
+    return config;
   },
 };
 

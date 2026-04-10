@@ -1,8 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Upload, ExternalLink, FileText, Award, Maximize2, Minimize2, Loader2 } from 'lucide-react'
+import { X, Upload, FileText, Award, Maximize2, Minimize2, Loader2 } from 'lucide-react'
 import { PastPaper } from '@/types'
+import { Document, Page, pdfjs } from 'react-pdf'
+
+// Correct CSS paths for react-pdf v7+
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
+
+// Use a stable CDN worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 
 interface PreviewModalProps {
   paper: PastPaper | null
@@ -15,38 +23,36 @@ interface PreviewModalProps {
 export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onGenerateMarkingScheme }: PreviewModalProps) {
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
+  const [numPages, setNumPages] = useState<number | null>(null)
 
   useEffect(() => {
-    if (isOpen) {
-      setIsLoading(true)
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent))
     }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  useEffect(() => {
+    if (isOpen) setIsLoading(true)
   }, [isOpen, paper])
 
   if (!isOpen || !paper) return null
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
-  }
-
-  const preventContextMenu = (e: React.MouseEvent) => {
+  const preventContextMenu = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault()
   }
 
   return (
-    <div 
+    <div
       className={`preview-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-all duration-300 ${isFullScreen ? 'p-0' : 'p-4'}`}
-      onClick={handleBackdropClick}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
       onContextMenu={preventContextMenu}
     >
-      <div 
-        className={`preview-modal relative bg-dark-card flex flex-col overflow-hidden border border-dark-lighter shadow-2xl transition-all duration-300 ${
-          isFullScreen 
-            ? 'w-full h-full rounded-none' 
-            : 'w-full max-w-6xl h-[90vh] rounded-2xl'
-        }`}
-      >
+      <div className={`preview-modal relative bg-dark-card flex flex-col overflow-hidden border border-dark-lighter shadow-2xl transition-all duration-300 ${isFullScreen ? 'w-full h-full rounded-none' : 'w-full max-w-6xl h-[90vh] rounded-2xl'}`}>
+        
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-dark-lighter flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -54,58 +60,35 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
               <FileText className="w-5 h-5 text-primary" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-white font-semibold truncate">
-                {paper.courseCode} - {paper.courseName}
-              </h2>
+              <h2 className="text-white font-semibold truncate">{paper.courseCode} - {paper.courseName}</h2>
               <p className="text-text-gray text-sm">
-                {paper.year} • {paper.semester === 'first' ? 'Semester 1' : 'Semester 2'} • {paper.examType === 'cat' ? 'CAT' : paper.examType.charAt(0).toUpperCase() + paper.examType.slice(1)} Exam
+                {paper.year} • {paper.semester === 'first' ? 'Semester 1' : 'Semester 2'} • {paper.examType.toUpperCase()} Exam
               </p>
             </div>
           </div>
-          
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => onGenerateMarkingScheme(paper)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary/20 text-primary rounded-lg font-medium text-sm hover:bg-primary/30 transition-colors"
-            >
+          <div className="flex items-center gap-2">
+            <button onClick={() => onGenerateMarkingScheme(paper)} className="flex items-center gap-2 px-4 py-2 bg-primary/20 text-primary rounded-lg font-medium text-sm hover:bg-primary/30 transition-colors">
               <Award className="w-4 h-4" />
               <span className="hidden sm:inline">Generate Marking Scheme</span>
             </button>
-            
-            <button
-              onClick={() => onUploadToAI(paper)}
-              className="flex items-center gap-2 px-4 py-2 bg-secondary/20 text-secondary rounded-lg font-medium text-sm hover:bg-secondary/30 transition-colors"
-            >
+            <button onClick={() => onUploadToAI(paper)} className="flex items-center gap-2 px-4 py-2 bg-secondary/20 text-secondary rounded-lg font-medium text-sm hover:bg-secondary/30 transition-colors">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">Ask AI</span>
             </button>
-            
             <div className="w-px h-6 bg-dark-lighter mx-1" />
-
-            <button
-              onClick={() => setIsFullScreen(!isFullScreen)}
-              className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
-              title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
-            >
+            <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2 text-text-gray hover:text-white rounded-lg">
               {isFullScreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
             </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
-            >
+            <button onClick={onClose} className="p-2 text-text-gray hover:text-white rounded-lg">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* PDF Preview Area */}
-        <div 
-          className="flex-1 bg-dark relative group overflow-y-auto"
-          onContextMenu={preventContextMenu}
-        >
+        {/* PDF Preview Area: Restored Scrollable Container */}
+        <div className="flex-1 bg-dark relative group overflow-y-auto" onContextMenu={preventContextMenu}>
           {paper.previewUrl || paper.fileUrl ? (
-            <div className="relative w-full h-[350vh]">
+            <>
               {isLoading && (
                 <div className="absolute inset-0 w-full h-full bg-dark z-20 flex items-start justify-center pt-[40vh]">
                   <div className="flex flex-col items-center gap-3">
@@ -114,27 +97,49 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
                   </div>
                 </div>
               )}
-              
-              {/* Transparent Overlay to block interaction */}
-              <div 
-                className="absolute inset-0 z-10" 
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }}
-              />
 
-              <iframe 
-                src={`${paper.previewUrl || paper.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                className="w-full h-full border-none print:hidden"
-                title={`${paper.courseCode} - ${paper.courseName}`}
-                onLoad={() => setIsLoading(false)}
-              />
-              {/* Fallback/Download overlay if iframe fails or for better UX */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
-                  {/* Hidden fallback */}
-              </div>
-            </div>
+              {isMobile ? (
+                /* Mobile: Canvas Rendering */
+                <div className="p-4 w-full flex flex-col items-center select-none">
+                  <Document
+                    file={paper.previewUrl || paper.fileUrl}
+                    onLoadSuccess={({ numPages }) => {
+                      setNumPages(numPages)
+                      setIsLoading(false)
+                    }}
+                    className="flex flex-col items-center gap-4"
+                  >
+                    {Array.from(new Array(numPages), (el, index) => (
+                      <Page 
+                        key={`page_${index + 1}`} 
+                        pageNumber={index + 1} 
+                        width={typeof window !== 'undefined' ? window.innerWidth - 32 : 300}
+                        renderAnnotationLayer={true}
+                        renderTextLayer={false}
+                        className="shadow-lg"
+                      />
+                    ))}
+                  </Document>
+                </div>
+              ) : (
+                /* Desktop: EXACTLY as you originally had it */
+                <div className="relative w-full h-[350vh]">
+                  <div
+                    className="absolute inset-0 z-10"
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                  />
+                  <iframe
+                    src={`${paper.previewUrl || paper.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                    className="w-full h-full border-none print:hidden"
+                    title={`${paper.courseCode} - ${paper.courseName}`}
+                    onLoad={() => setIsLoading(false)}
+                  />
+                </div>
+              )}
+            </>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center text-text-gray gap-4">
               <FileText className="w-16 h-16 opacity-20" />
