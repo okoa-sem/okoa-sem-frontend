@@ -91,15 +91,16 @@ export default function Navigation() {
         <div className="container-custom">
           <div className="flex items-center justify-between h-16 md:h-18">
             {/* Logo */}
-            <Link href={ROUTES.HOME} className="flex items-center gap-2.5 group z-[101]">
+            <Link href={ROUTES.HOME} className="flex items-center gap-0 group z-[101] mt-3">
               <Image 
                 src="/okoa-logo.png"
-                alt="Okoa Sem Logo" 
-                width={40} 
-                height={40}
-                className="group-hover:scale-105 transition-transform"
+                alt="Okoa Sem Logo"
+                width={56}
+                height={56}
+                className="group-hover:scale-105 transition-transform mix-blend-mode-screen"
+                style={{ mixBlendMode: 'screen' }}
               />
-              <span className={`font-semibold text-lg hidden sm:block ${isLight ? 'text-gray-900' : 'text-white'}`}>
+              <span className={`font-semibold text-lg hidden sm:block -ml-2 ${isLight ? 'text-gray-900' : 'text-white'}`}>
                 Okoa Sem
               </span>
             </Link>
