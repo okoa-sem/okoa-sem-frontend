@@ -399,12 +399,14 @@ export default function ChatbotPage() {
       setIsTyping(false)
       loadSessions()
 
-      // ── If this is a paper/marking-scheme session, persist AI content ─────────
-      if (paperId && fullResponse.aiResponse?.content) {
+      // ── Only save if NEW AI content was generated in this session ─────────────
+      // (not when just restoring existing marking scheme to localStorage)
+      // Check if this response came from current WebSocket session and is new
+      if (paperId && fullResponse.aiResponse?.content && isConnected && activeChatId) {
         saveMarkingSchemeContent(fullResponse.aiResponse.content)
       }
     }
-  }, [fullResponse, isLoading, paperId, saveMarkingSchemeContent])
+  }, [fullResponse, isLoading, paperId, saveMarkingSchemeContent, isConnected, activeChatId])
 
   // ─── WebSocket error handling ─────────────────────────────────────────────────
 

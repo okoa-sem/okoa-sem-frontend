@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { httpClient } from '@/core/http/client'
 import { MarkingSchemeContent, MarkingSchemeStatusData } from '@/features/marking-schemes/types'
 import { markingSchemeStorage } from '@/features/marking-schemes/utils/markingSchemeStorage'
+import { chatService } from '@/features/chatbot/services/chatService'
 
 interface GenerateMarkingSchemeModalProps {
   paper: PastPaper | null
@@ -85,12 +86,11 @@ export default function GenerateMarkingSchemeModal({
       stopPolling()
 
       if (paper) {
-        // Always save to localStorage with whatever content we have
-        const content = scheme?.content || ''
-        saveToLocalStorage(content)
+        
+        if (scheme?.content) {
+          saveToLocalStorage(scheme.content)
 
-        // Also call onGenerate for any parent-level side effects
-        if (scheme) {
+          // Also call onGenerate for any parent-level side effects
           const markingScheme: MarkingScheme = {
             id: scheme.id,
             userId: 'current-user',
@@ -101,6 +101,10 @@ export default function GenerateMarkingSchemeModal({
             updatedAt: new Date(scheme.updatedAt),
           }
           onGenerate(paper, markingScheme).catch(() => {})
+        } else {
+          // No content in API response yet - save stub to localStorage so it appears in list
+          // Content will be fetched and updated when user views in chatbot
+          saveToLocalStorage('')
         }
       }
 
@@ -108,6 +112,50 @@ export default function GenerateMarkingSchemeModal({
     },
     [paper, onGenerate, stopPolling, saveToLocalStorage]
   )
+
+  // ─── Auto-fetch content from chat when success (even if user doesn't click "View in Chatbot") ──
+
+  useEffect(() => {
+    if (modalState !== 'success' || !paper) return
+
+    const fetchAndSaveContent = async () => {
+      try {
+        const sessions = await chatService.getAllSessions()
+        const sessionTitle = `${paper.courseCode} - ${paper.courseName}`
+        
+        const existing = sessions.find(
+          (s) =>
+            s.title === sessionTitle ||
+            (paper.courseCode && s.title.includes(paper.courseCode))
+        )
+
+        if (existing) {
+          const detail = await chatService.getSessionById(existing.sessionId)
+          if (detail?.messages?.length) {
+            const assistantMsgs = detail.messages.filter(m => m.role === 'ASSISTANT')
+            if (assistantMsgs.length > 0) {
+              const content = assistantMsgs.map(m => m.content).join('\n\n')
+              // Update localStorage with the actual content
+              const schemes = markingSchemeStorage.getAll()
+              const existingIndex = schemes.findIndex(s => s.paperId === paper.id)
+              if (existingIndex >= 0) {
+                schemes[existingIndex].content = content
+                schemes[existingIndex].updatedAt = new Date().toISOString()
+                localStorage.setItem('okoa_sem_marking_schemes', JSON.stringify(schemes))
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Silently fail - content will be fetched when user views in chatbot
+        console.log('[GenerateMarkingSchemeModal] Background content fetch:', err)
+      }
+    }
+
+    // Delay slightly to allow backend to fully process
+    const timer = setTimeout(fetchAndSaveContent, 2000)
+    return () => clearTimeout(timer)
+  }, [modalState, paper])
 
   // ─── Background polling ───────────────────────────────────────────────────
 
@@ -164,9 +212,32 @@ export default function GenerateMarkingSchemeModal({
           }
         }
 
-        // Timed out — generation was confirmed started, so show success
+        // Timed out — generation was confirmed started, so fetch latest and show success
         if (pollCountRef.current >= MAX_BACKGROUND_POLLS) {
-          markSuccess()
+          // Last attempt: fetch all marking schemes to get the latest content
+          if (paper) {
+            try {
+              const res = await httpClient.get<{
+                success: boolean
+                data: { markingSchemes: MarkingSchemeContent[] }
+              }>('/marking-schemes')
+
+              const paperId =
+                typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
+              const found = (res.data?.data?.markingSchemes ?? []).find(
+                (s) => s.examPaperId === paperId && s.status === 'COMPLETED'
+              )
+              if (found) {
+                markSuccess(found)
+              } else {
+                markSuccess()
+              }
+            } catch {
+              markSuccess()
+            }
+          } else {
+            markSuccess()
+          }
           return
         }
 
