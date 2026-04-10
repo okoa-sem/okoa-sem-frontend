@@ -180,9 +180,7 @@ export default function ChatbotPage() {
     const isSubscribed = subscription.isActive
 
     if (!isSubscribed) {
-      // Don't set restoreTriggeredRef here — allow this effect to re-run when
-      // subscription.isActive becomes true (e.g. after the API check completes
-      // for users who navigate client-side while already authenticated).
+      
       setMessages([makeWelcome()])
       return
     }
@@ -270,40 +268,9 @@ export default function ChatbotPage() {
       return
     }
 
-    // ── Normal session restore ─────────────────────────────────────────────────
-    const savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
-
-    if (!savedSessionId) {
-      setMessages([makeWelcome()])
-      return
-    }
-
-    setIsRestoringSession(true)
-    chatService
-      .getSessionById(savedSessionId)
-      .then((session) => {
-        if (session?.messages?.length) {
-          setMessages(
-            session.messages.map((m) => ({
-              id: m.messageId,
-              role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
-              content: m.content,
-              timestamp: new Date(m.createdAt),
-            }))
-          )
-          setActiveChatId(savedSessionId)
-        } else {
-          setMessages([makeWelcome()])
-          setActiveChatId(savedSessionId)
-        }
-      })
-      .catch(() => {
-        localStorage.removeItem(ACTIVE_SESSION_KEY)
-        setMessages([makeWelcome()])
-      })
-      .finally(() => {
-        setIsRestoringSession(false)
-      })
+    // ── Always show greeting on fresh page load ────────────────────────────────
+    // Previous sessions are accessible from the sidebar
+    setMessages([])
   }, [hasCheckedSubscription, subscription.isActive, paperId, saveMarkingSchemeContent])
 
   // ─── Persist activeChatId ────────────────────────────────────────────────────
