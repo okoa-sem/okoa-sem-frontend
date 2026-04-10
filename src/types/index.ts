@@ -6,6 +6,7 @@ export interface User {
   avatar?: string
   school?: string
   department?: string
+  phoneNumber?: string
   subscriptionStatus: 'free' | 'daily' | 'monthly'
   subscriptionExpiry?: Date
   createdAt: Date

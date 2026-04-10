@@ -16,6 +16,7 @@ export interface User {
   displayName: string
   institution?: string
   photoUrl: string | null
+  phoneNumber?: string
   emailVerified: boolean
   role: 'USER' | 'ADMIN'
   authProvider: 'EMAIL' | 'GOOGLE'

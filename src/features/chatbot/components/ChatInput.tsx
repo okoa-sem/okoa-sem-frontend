@@ -89,10 +89,10 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
 
   return (
     <div 
-      className="p-4 md:p-6 lg:p-8 sticky bottom-0 z-50"
+      className="px-3 sm:px-4 py-4 md:px-6 md:py-6 lg:p-8 sticky bottom-0 z-50 w-full"
       style={getContainerStyle()}
     >
-      <div className="max-w-[900px] mx-auto flex gap-4 items-end">
+      <div className="max-w-[900px] mx-auto flex gap-3 md:gap-4 items-end lg:px-0">
         <textarea
           ref={textareaRef}
           value={message}
@@ -104,7 +104,7 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
           disabled={disabled}
           rows={1}
           className={`
-            flex-1 rounded-3xl px-6 py-4 text-base outline-none resize-none 
+            flex-1 rounded-3xl px-4 md:px-6 py-3 md:py-4 text-base outline-none resize-none 
             max-h-[150px] min-h-[52px] transition-all disabled:opacity-50 font-[inherit] scrollbar-hide
             ${isLight ? 'placeholder:text-gray-400' : 'placeholder:text-gray-500'}
           `}

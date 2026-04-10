@@ -195,7 +195,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div
-      className={`flex gap-4 mb-8 animate-slideIn ${
+      className={`flex gap-3 md:gap-4 mb-8 animate-slideIn ${
         isBot ? 'justify-start' : 'justify-end'
       }`}
       onMouseEnter={() => setHoverActions(true)}
@@ -212,7 +212,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       )}
 
       {/* Message Content Container */}
-      <div className="flex flex-col gap-2 max-w-[900px]">
+      <div className="flex flex-col gap-2 max-w-[900px] min-w-0">
         {/* Main Message */}
         <div
           className="p-5 rounded-2xl"
@@ -239,7 +239,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
         {/* Actions Row */}
         <div 
-          className="flex items-center gap-2 px-2 transition-all"
+          className="flex items-center gap-2 px-3 sm:px-4 md:px-5 transition-all flex-wrap"
         >
           <span 
             className="text-xs font-medium"
