@@ -91,7 +91,7 @@ export default function Navigation() {
         <div className="container-custom">
           <div className="flex items-center justify-between h-16 md:h-18">
             {/* Logo */}
-            <Link href={ROUTES.HOME} className="flex items-center gap-0 group z-[101] mt-3">
+            <Link href={ROUTES.HOME} className="flex items-center gap-0 group z-[101]">
               <Image 
                 src="/okoa-logo.png"
                 alt="Okoa Sem Logo"
@@ -100,7 +100,7 @@ export default function Navigation() {
                 className="group-hover:scale-105 transition-transform mix-blend-mode-screen"
                 style={{ mixBlendMode: 'screen' }}
               />
-              <span className={`font-semibold text-lg hidden sm:block -ml-2 ${isLight ? 'text-gray-900' : 'text-white'}`}>
+              <span className={`font-semibold text-xs sm:text-lg -ml-3 ${isLight ? 'text-gray-900' : 'text-white'}`}>
                 Okoa Sem
               </span>
             </Link>
@@ -124,10 +124,8 @@ export default function Navigation() {
             </div>
 
             {/* Right Side Actions */}
-            <div className="flex items-center gap-4">
-              {/* Theme toggle */}
-             
-
+            <div className="flex items-center gap-2 sm:gap-4">
+              {/* Desktop Auth Buttons */}
               {isAuthenticated ? (
                 <ProfileDropdown />
               ) : (
@@ -152,6 +150,28 @@ export default function Navigation() {
                     Register
                   </Link>
                 </>
+              )}
+
+              {/* Mobile Auth Buttons */}
+              {!isAuthenticated && (
+                <div className="flex items-center gap-2 sm:hidden">
+                  <Link
+                    href={ROUTES.LOGIN}
+                    className={`px-3 py-2 text-xs font-semibold transition-all duration-200 rounded-lg ${
+                      isLight 
+                        ? 'bg-white text-primary border border-primary hover:bg-primary/5' 
+                        : 'bg-dark-card text-primary border border-primary/50 hover:border-primary hover:bg-primary/5'
+                    }`}
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    href={ROUTES.SIGNUP}
+                    className="px-3 py-2 bg-primary text-dark rounded-lg text-xs font-semibold hover:bg-primary-dark transition-colors"
+                  >
+                    Register
+                  </Link>
+                </div>
               )}
 
               {/* Mobile Menu Button  */}
