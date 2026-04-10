@@ -53,11 +53,18 @@ export const signInWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
     console.log('Backend response successful:', response.status)
     return response.data
   } catch (error: any) {
+    // Handle user cancellation gracefully
+    if (error.code === 'auth/popup-closed-by-user') {
+      console.log('User closed the Google sign-in popup')
+      throw new Error('Sign-in was cancelled. Please try again.')
+    }
+
     console.error('Google sign-in failed:', {
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
       message: error.message,
+      code: error.code,
     })
     throw error
   }

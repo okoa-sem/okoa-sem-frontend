@@ -99,21 +99,8 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, provider)
     authStateCache = result.user
 
-    // Get Google OAuth token for backend communication
-    const credential = GoogleAuthProvider.credentialFromResult(result)
-    const token = credential?.idToken
-
-    console.log('Firebase Google auth result:', {
-      userEmail: result.user.email,
-      uid: result.user.uid,
-      credentialExists: !!credential,
-      tokenExists: !!token,
-      tokenLength: token?.length,
-    })
-
-    if (!token) {
-      console.warn('Warning: idToken is null/undefined from credential')
-    }
+    // Get Firebase ID token for backend communication (NOT the Google OAuth token)
+    const token = await result.user.getIdToken()
 
     return {
       user: result.user,

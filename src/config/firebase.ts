@@ -14,6 +14,7 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
+  clientId: process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || '',
 }
 
 // Validate Firebase configuration
@@ -62,6 +63,11 @@ export const getFirebaseAuth = async (): Promise<Auth> => {
 let analytics: Analytics | null = null
 
 export const getFirebaseAnalytics = (): Analytics | null => {
+  // Disable analytics in development to avoid installation errors
+  if (process.env.NODE_ENV === 'development') {
+    return null
+  }
+
   // Only initialize analytics in browser environment
   if (typeof window === 'undefined') {
     return null
@@ -83,6 +89,11 @@ export const getFirebaseAnalytics = (): Analytics | null => {
 let performance: any = null
 
 export const getFirebasePerformance = (): any => {
+  // Disable performance monitoring in development to avoid installation errors
+  if (process.env.NODE_ENV === 'development') {
+    return null
+  }
+
   // Only initialize performance monitoring in browser environment
   if (typeof window === 'undefined') {
     return null
