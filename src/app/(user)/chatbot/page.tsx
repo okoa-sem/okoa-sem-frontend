@@ -587,9 +587,9 @@ export default function ChatbotPage() {
               scrollbarWidth: 'thin',
             }}
           >
-            <div className="max-w-6xl mx-auto px-3 md:px-8 lg:px-12 flex flex-col w-full">
+            <div className="max-w-6xl mx-auto px-3 md:px-8 lg:px-12 flex flex-col w-full min-h-full">
               {messages.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-12 px-3 md:px-4">
+                <div className="flex-1 flex flex-col items-center justify-center py-16 px-3 md:px-4">
                   <div className="text-center mb-12">
                     <h1
                       className="text-4xl md:text-5xl font-bold mb-4"
