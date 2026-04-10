@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, MessageCircle, X } from 'lucide-react'
+import { Plus, MessageCircle, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ChatHistorySection } from '@/types'
 
 interface ChatSidebarProps {
@@ -11,6 +11,8 @@ interface ChatSidebarProps {
   activeChatId: string | null
   onSelectChat: (chatId: string) => void
   onNewChat: () => void
+  isCollapsed?: boolean
+  onToggleCollapse?: (collapsed: boolean) => void
 }
 
 export default function ChatSidebar({
@@ -20,6 +22,8 @@ export default function ChatSidebar({
   activeChatId,
   onSelectChat,
   onNewChat,
+  isCollapsed = false,
+  onToggleCollapse,
 }: ChatSidebarProps) {
   const [isLight, setIsLight] = useState(false)
 
@@ -79,6 +83,9 @@ export default function ChatSidebar({
     color: isLight ? '#6B7280' : '#A0A0A0',
   })
 
+  // Collapsed width for desktop
+  const sidebarWidth = isCollapsed ? 'w-[70px]' : 'w-[280px]'
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -91,7 +98,7 @@ export default function ChatSidebar({
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:relative top-0 left-0 h-full w-[280px] border-r flex flex-col z-50 lg:z-auto transition-transform duration-300 ${
+        className={`fixed lg:relative top-0 left-0 h-full border-r flex flex-col z-50 lg:z-auto transition-all duration-300 ${sidebarWidth} ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
         style={getSidebarStyle()}
@@ -117,6 +124,24 @@ export default function ChatSidebar({
           </button>
         </div>
 
+        {/* Desktop Collapse Button */}
+        <div 
+          className="hidden lg:flex p-2 border-b items-center justify-end"
+          style={getBorderStyle()}
+        >
+          <button
+            onClick={() => onToggleCollapse?.(!isCollapsed)}
+            className={`p-2 rounded-lg transition-colors ${
+              isLight 
+                ? 'hover:bg-gray-100 text-gray-500' 
+                : 'hover:bg-white/10 text-gray-400'
+            }`}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+          </button>
+        </div>
+
         {/* New Chat Button */}
         <div 
           className="p-4 border-b"
@@ -127,10 +152,11 @@ export default function ChatSidebar({
               onNewChat()
               onClose()
             }}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-base transition-colors bg-primary text-white hover:bg-primary-dark"
+            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-colors bg-primary text-white hover:bg-primary-dark`}
+            title={isCollapsed ? 'New Chat' : undefined}
           >
             <Plus className="w-5 h-5" />
-            <span>New Chat</span>
+            {!isCollapsed && <span>New Chat</span>}
           </button>
         </div>
 
@@ -142,7 +168,7 @@ export default function ChatSidebar({
             scrollbarColor: isLight ? '#D1D5DB transparent' : '#2A2A2A transparent',
           }}
         >
-          {chatHistory.map((section, sectionIndex) => (
+          {!isCollapsed && chatHistory.map((section, sectionIndex) => (
             <div key={sectionIndex} className="mb-6">
               <div 
                 className="text-xs font-semibold uppercase tracking-wider mb-2 px-3"
@@ -161,6 +187,7 @@ export default function ChatSidebar({
                     }}
                     className="w-full flex items-center gap-3 py-3 px-4 rounded-lg mb-1 transition-all text-left hover:opacity-80"
                     style={getChatItemStyle(isActive)}
+                    title={item.title}
                   >
                     <MessageCircle 
                       className="w-4 h-4 flex-shrink-0" 
@@ -184,7 +211,7 @@ export default function ChatSidebar({
             </div>
           ))}
 
-          {chatHistory.length === 0 && (
+          {!isCollapsed && chatHistory.length === 0 && (
             <div 
               className="text-center py-8"
               style={getEmptyStateStyle()}

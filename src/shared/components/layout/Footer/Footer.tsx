@@ -8,7 +8,6 @@ const footerSections = [
       { label: 'Past Papers', href: ROUTES.PAPERS },
       { label: 'Smart Search', href: '/#features' },
       { label: 'AI Study Bot', href: ROUTES.CHATBOT },
-      { label: 'Study Groups', href: ROUTES.STUDY_GROUPS },
       { label: 'Pricing Plans', href: ROUTES.PRICING },
     ],
   },
@@ -16,9 +15,9 @@ const footerSections = [
     title: 'Resources',
     links: [
       { label: 'Browse Schools', href: ROUTES.SCHOOLS },
-      { label: 'Study Tips', href: '#' },
+      { label: 'Marking Schemes', href: ROUTES.MARKING_SCHEMES },
       { label: 'YouTube Channel', href: ROUTES.YOUTUBE },
-      { label: 'Downloads', href: ROUTES.DOWNLOADS },
+      { label: 'FAQ', href: '/#faq' },
     ],
   },
   {
@@ -26,8 +25,8 @@ const footerSections = [
     links: [
       { label: 'About Us', href: '#' },
       { label: 'Contact', href: '#contact' },
-      { label: 'Privacy Policy', href: '#' },
-      { label: 'Terms of Service', href: '#' },
+      // { label: 'Privacy Policy', href: '#' },
+      // { label: 'Terms of Service', href: '#' },
     ],
   },
 ]
@@ -72,8 +71,9 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-dark-lighter text-center text-text-gray">
+        <div className="pt-8 border-t border-dark-lighter text-center text-text-gray space-y-3">
           <p>&copy; {new Date().getFullYear()} Okoa Sem. All rights reserved.</p>
+          <p className="text-sm">Payments powered by <span className="text-primary font-semibold">PayHero</span></p>
         </div>
       </div>
     </footer>

@@ -1,7 +1,13 @@
+import { PaymentProvider } from '@/app/providers/payments-provider/PaymentsProvider';
+
 export default function MyAccountLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <>{children}</>
+  return (
+    <PaymentProvider>
+      {children}
+    </PaymentProvider>
+  )
 }

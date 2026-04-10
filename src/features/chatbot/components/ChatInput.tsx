@@ -63,8 +63,8 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
   const isDisabled = disabled || !message.trim()
 
   const getContainerStyle = (): React.CSSProperties => ({
-    backgroundColor: isLight ? '#F9FAFB' : '#1A1A1A',
-    borderTop: isLight ? '2px solid #00D666' : '1px solid #2A2A2A',
+    backgroundColor: isLight ? '#F9FAFB' : '#0F0F12',
+    borderTop: isLight ? '1px solid #E5E7EB' : '1px solid #2A2A2A',
   })
 
   const getTextareaStyle = (): React.CSSProperties => ({
@@ -74,7 +74,7 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
     borderColor: isFocused ? '#00D666' : (isLight ? '#E5E7EB' : '#2A2A2A'),
     color: isLight ? '#1F2937' : '#FFFFFF',
     caretColor: '#00D666',
-    boxShadow: isFocused && isLight ? '0 0 0 3px rgba(16, 216, 69, 0.15)' : 'none',
+    boxShadow: isFocused ? `0 0 0 3px ${isLight ? 'rgba(0, 214, 102, 0.15)' : 'rgba(0, 214, 102, 0.1)'}` : 'none',
   })
 
   const getButtonStyle = (): React.CSSProperties => ({
@@ -83,15 +83,16 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
       : '#00D666',
     color: isDisabled
       ? (isLight ? '#9CA3AF' : '#6B7280')
-      : '#FFFFFF',
+      : isLight ? '#000000' : '#FFFFFF',
+    fontWeight: 600,
   })
 
   return (
     <div 
-      className="p-4 md:p-6 lg:p-8 sticky bottom-0 z-50"
+      className="px-3 sm:px-4 py-4 md:px-6 md:py-6 lg:p-8 sticky bottom-0 z-50 w-full"
       style={getContainerStyle()}
     >
-      <div className="max-w-[900px] mx-auto flex gap-4 items-end">
+      <div className="max-w-[900px] mx-auto flex gap-3 md:gap-4 items-end lg:px-0">
         <textarea
           ref={textareaRef}
           value={message}
@@ -103,7 +104,7 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
           disabled={disabled}
           rows={1}
           className={`
-            flex-1 rounded-3xl px-6 py-4 text-base outline-none resize-none 
+            flex-1 rounded-3xl px-4 md:px-6 py-3 md:py-4 text-base outline-none resize-none 
             max-h-[150px] min-h-[52px] transition-all disabled:opacity-50 font-[inherit] scrollbar-hide
             ${isLight ? 'placeholder:text-gray-400' : 'placeholder:text-gray-500'}
           `}

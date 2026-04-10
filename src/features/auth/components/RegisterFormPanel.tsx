@@ -8,12 +8,15 @@ import GoogleSignInButton from './GoogleSignInButton'
 import EmailPasswordRegisterForm from './EmailPasswordRegisterForm'
 import OtpVerificationForm from './OtpVerificationForm'
 import { register, verifyEmail, resendOtp } from '@/features/auth/services/authService'
+import { signUpWithGoogleAuth } from '@/features/auth/services/googleAuthService'
 import { handleAuthError } from '@/shared/utils/errorHandler'
+import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 
 type AuthStep = 'DETAILS' | 'OTP'
 
 export default function RegisterFormPanel() {
   const router = useRouter()
+  const { login: authLogin } = useAuth()
   const [step, setStep] = useState<AuthStep>('DETAILS')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +71,27 @@ export default function RegisterFormPanel() {
     }
   }
 
+  // Handle Google Sign-Up
+  const handleGoogleSignUp = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await signUpWithGoogleAuth()
+
+      // Store tokens and user data
+      authLogin(response.data.user, response.data.accessToken)
+      localStorage.setItem('refreshToken', response.data.refreshToken)
+
+      // Redirect to home
+      router.push('/')
+    } catch (error: any) {
+      console.error('Google sign-up error:', error)
+      setError(error.response?.data?.message || error.message || 'Google sign-up failed. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="w-full flex flex-col">
       <div className="text-center mb-6">
@@ -104,7 +128,11 @@ export default function RegisterFormPanel() {
           </div>
 
           <div className="mb-5">
-            <GoogleSignInButton onClick={() => alert('Coming soon')} isLoading={isLoading} />
+            <GoogleSignInButton 
+              onClick={handleGoogleSignUp} 
+              isLoading={isLoading}
+              disabled={isLoading}
+            />
           </div>
 
           <div className="text-center mb-4 pt-1">

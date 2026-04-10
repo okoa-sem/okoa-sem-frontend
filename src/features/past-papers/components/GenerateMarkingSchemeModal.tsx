@@ -1,8 +1,13 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Loader, Check } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X, Loader, Check, AlertCircle, MessageCircle, RefreshCw } from 'lucide-react'
 import { PastPaper, MarkingScheme } from '@/types'
+import Link from 'next/link'
+import { httpClient } from '@/core/http/client'
+import { MarkingSchemeContent, MarkingSchemeStatusData } from '@/features/marking-schemes/types'
+import { markingSchemeStorage } from '@/features/marking-schemes/utils/markingSchemeStorage'
+import { chatService } from '@/features/chatbot/services/chatService'
 
 interface GenerateMarkingSchemeModalProps {
   paper: PastPaper | null
@@ -11,57 +16,287 @@ interface GenerateMarkingSchemeModalProps {
   onGenerate: (paper: PastPaper, markingScheme: MarkingScheme) => Promise<void>
 }
 
-export default function GenerateMarkingSchemeModal({ 
-  paper, 
-  isOpen, 
-  onClose, 
-  onGenerate 
+type ModalState = 'idle' | 'starting' | 'waiting' | 'success' | 'error'
+
+const POLL_INTERVAL_MS = 4000
+const MAX_BACKGROUND_POLLS = 15
+
+export default function GenerateMarkingSchemeModal({
+  paper,
+  isOpen,
+  onClose,
+  onGenerate,
 }: GenerateMarkingSchemeModalProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
+  const [modalState, setModalState] = useState<ModalState>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  if (!isOpen || !paper) return null
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const pollCountRef = useRef(0)
+  const activeRef = useRef(false)
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !isLoading) {
-      onClose()
+  // ─── Save to localStorage ─────────────────────────────────────────────────
+
+  const saveToLocalStorage = useCallback(
+    (content: string) => {
+      if (!paper) return
+      const now = new Date().toISOString()
+      markingSchemeStorage.save({
+        id: `ms_${paper.id}_${Date.now()}`,
+        paperId: paper.id,
+        paperCode: paper.courseCode,
+        paperTitle: paper.courseName,
+        paperYear: paper.year,
+        paperSemester: paper.semester,
+        paperExamType: paper.examType,
+        content,
+        createdAt: now,
+        updatedAt: now,
+      })
+    },
+    [paper]
+  )
+
+  // ─── Cleanup ──────────────────────────────────────────────────────────────
+
+  const stopPolling = useCallback(() => {
+    activeRef.current = false
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) {
+      stopPolling()
+      setModalState('idle')
+      setError(null)
+      pollCountRef.current = 0
+    }
+  }, [isOpen, stopPolling])
+
+  useEffect(() => {
+    return () => stopPolling()
+  }, [stopPolling])
+
+  // ─── Success handler ──────────────────────────────────────────────────────
+
+  const markSuccess = useCallback(
+    (scheme?: MarkingSchemeContent) => {
+      stopPolling()
+
+      if (paper) {
+        
+        if (scheme?.content) {
+          saveToLocalStorage(scheme.content)
+
+          // Also call onGenerate for any parent-level side effects
+          const markingScheme: MarkingScheme = {
+            id: scheme.id,
+            userId: 'current-user',
+            paperId: paper.id,
+            paper,
+            content: scheme.content,
+            createdAt: new Date(scheme.createdAt),
+            updatedAt: new Date(scheme.updatedAt),
+          }
+          onGenerate(paper, markingScheme).catch(() => {})
+        } else {
+          // No content in API response yet - save stub to localStorage so it appears in list
+          // Content will be fetched and updated when user views in chatbot
+          saveToLocalStorage('')
+        }
+      }
+
+      setModalState('success')
+    },
+    [paper, onGenerate, stopPolling, saveToLocalStorage]
+  )
+
+  // ─── Auto-fetch content from chat when success (even if user doesn't click "View in Chatbot") ──
+
+  useEffect(() => {
+    if (modalState !== 'success' || !paper) return
+
+    const fetchAndSaveContent = async () => {
+      try {
+        const sessions = await chatService.getAllSessions()
+        const sessionTitle = `${paper.courseCode} - ${paper.courseName}`
+        
+        const existing = sessions.find(
+          (s) =>
+            s.title === sessionTitle ||
+            (paper.courseCode && s.title.includes(paper.courseCode))
+        )
+
+        if (existing) {
+          const detail = await chatService.getSessionById(existing.sessionId)
+          if (detail?.messages?.length) {
+            const assistantMsgs = detail.messages.filter(m => m.role === 'ASSISTANT')
+            if (assistantMsgs.length > 0) {
+              const content = assistantMsgs.map(m => m.content).join('\n\n')
+              // Update localStorage with the actual content
+              const schemes = markingSchemeStorage.getAll()
+              const existingIndex = schemes.findIndex(s => s.paperId === paper.id)
+              if (existingIndex >= 0) {
+                schemes[existingIndex].content = content
+                schemes[existingIndex].updatedAt = new Date().toISOString()
+                localStorage.setItem('okoa_sem_marking_schemes', JSON.stringify(schemes))
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Silently fail - content will be fetched when user views in chatbot
+        console.log('[GenerateMarkingSchemeModal] Background content fetch:', err)
+      }
+    }
+
+    // Delay slightly to allow backend to fully process
+    const timer = setTimeout(fetchAndSaveContent, 2000)
+    return () => clearTimeout(timer)
+  }, [modalState, paper])
+
+  // ─── Background polling ───────────────────────────────────────────────────
+
+  const startBackgroundPolling = useCallback(
+    (sid: string) => {
+      activeRef.current = true
+      pollCountRef.current = 0
+
+      const poll = async () => {
+        if (!activeRef.current) return
+        pollCountRef.current += 1
+
+        // Try status endpoint
+        try {
+          const res = await httpClient.get<{
+            success: boolean
+            data: MarkingSchemeStatusData
+          }>(`/marking-schemes/status/${sid}`)
+
+          const data = res.data?.data
+          if (data?.status === 'COMPLETED' && data.generatedMarkingScheme) {
+            markSuccess(data.generatedMarkingScheme)
+            return
+          }
+          if (data?.status === 'FAILED') {
+            stopPolling()
+            setError('Generation failed on the server. Please try again.')
+            setModalState('error')
+            return
+          }
+        } catch {
+          // 500 — continue polling
+        }
+
+        // Every 3 polls, try the list endpoint as fallback
+        if (pollCountRef.current % 3 === 0 && paper) {
+          try {
+            const res = await httpClient.get<{
+              success: boolean
+              data: { markingSchemes: MarkingSchemeContent[] }
+            }>('/marking-schemes')
+
+            const paperId =
+              typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
+            const found = (res.data?.data?.markingSchemes ?? []).find(
+              (s) => s.examPaperId === paperId && s.status === 'COMPLETED'
+            )
+            if (found) {
+              markSuccess(found)
+              return
+            }
+          } catch {
+            // 500 — continue
+          }
+        }
+
+        // Timed out — generation was confirmed started, so fetch latest and show success
+        if (pollCountRef.current >= MAX_BACKGROUND_POLLS) {
+          // Last attempt: fetch all marking schemes to get the latest content
+          if (paper) {
+            try {
+              const res = await httpClient.get<{
+                success: boolean
+                data: { markingSchemes: MarkingSchemeContent[] }
+              }>('/marking-schemes')
+
+              const paperId =
+                typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
+              const found = (res.data?.data?.markingSchemes ?? []).find(
+                (s) => s.examPaperId === paperId && s.status === 'COMPLETED'
+              )
+              if (found) {
+                markSuccess(found)
+              } else {
+                markSuccess()
+              }
+            } catch {
+              markSuccess()
+            }
+          } else {
+            markSuccess()
+          }
+          return
+        }
+
+        if (activeRef.current) {
+          pollTimerRef.current = setTimeout(poll, POLL_INTERVAL_MS)
+        }
+      }
+
+      pollTimerRef.current = setTimeout(poll, 3000)
+    },
+    [paper, markSuccess, stopPolling]
+  )
+
+  // ─── Trigger generation ───────────────────────────────────────────────────
+
+  const handleGenerate = async () => {
+    if (!paper) return
+    setError(null)
+    setModalState('starting')
+
+    try {
+      const paperIdNum =
+        typeof paper.id === 'string' ? parseInt(paper.id, 10) : paper.id
+
+      const res = await httpClient.post<{
+        success: boolean
+        data: {
+          sessionId: string
+          examPaperId: number
+          status: string
+          message: string
+          generatedMarkingScheme: MarkingSchemeContent | null
+        }
+      }>('/marking-schemes/generate', { examPaperId: paperIdNum })
+
+      const result = res.data.data
+
+      if (result.status === 'COMPLETED' && result.generatedMarkingScheme) {
+        markSuccess(result.generatedMarkingScheme)
+      } else {
+        setModalState('waiting')
+        startBackgroundPolling(result.sessionId)
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to start generation'
+      setError(msg)
+      setModalState('error')
     }
   }
 
-  const handleGenerate = async () => {
-    setIsLoading(true)
-    setError(null)
-    setIsSuccess(false)
+  // ─── Render ───────────────────────────────────────────────────────────────
 
-    try {
-      
-      await new Promise(resolve => setTimeout(resolve, 2000))
+  if (!isOpen || !paper) return null
 
-      // Create a mock marking scheme
-      const mockMarkingScheme: MarkingScheme = {
-        id: `ms_${Date.now()}`,
-        userId: 'current-user', 
-        paperId: paper.id,
-        paper,
-        content: `# Marking Scheme for ${paper.courseCode}\n\n## ${paper.courseName}\n\n**Exam Type:** ${paper.examType}\n**Year:** ${paper.year}\n**Semester:** ${paper.semester === 'first' ? 'First' : 'Second'}\n\n## Section A\n- Question 1: (10 marks)\n- Question 2: (10 marks)\n- Question 3: (10 marks)\n\n## Section B\n- Question 4: (15 marks)\n- Question 5: (15 marks)\n\n## Marking Guidelines\n1. Award marks based on correct answers\n2. Partial credit may be given for working\n3. Grammar and presentation: up to 2 bonus marks`,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }
+  const canClose = modalState !== 'starting'
 
-      await onGenerate(paper, mockMarkingScheme)
-      setIsSuccess(true)
-
-      // Auto-close after success
-      setTimeout(() => {
-        onClose()
-        setIsSuccess(false)
-      }, 3000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate marking scheme')
-    } finally {
-      setIsLoading(false)
-    }
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && canClose) onClose()
   }
 
   return (
@@ -72,101 +307,160 @@ export default function GenerateMarkingSchemeModal({
       <div className="relative bg-dark-card w-full max-w-md rounded-2xl overflow-hidden border border-dark-lighter shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-dark-lighter">
-          <h2 className="text-xl font-bold text-white">
-            Generate Marking Scheme
-          </h2>
+          <h2 className="text-xl font-bold text-white">Generate Marking Scheme</h2>
           <button
             onClick={onClose}
-            disabled={isLoading}
-            className="p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors disabled:cursor-not-allowed"
+            disabled={!canClose}
+            className="p-1.5 rounded-lg hover:bg-dark-lighter transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 text-text-gray" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
-          {/* Paper Info */}
-          <div className="bg-dark rounded-lg p-4 space-y-2">
-            <div>
-              <p className="text-text-gray text-sm">Course Code</p>
-              <p className="text-white font-semibold">{paper.courseCode}</p>
-            </div>
-            <div>
-              <p className="text-text-gray text-sm">Course Name</p>
-              <p className="text-white font-semibold">{paper.courseName}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-text-gray text-sm">Year</p>
-                <p className="text-white">{paper.year}</p>
-              </div>
-              <div>
-                <p className="text-text-gray text-sm">Semester</p>
-                <p className="text-white">{paper.semester === 'first' ? 'First' : 'Second'}</p>
-              </div>
+        <div className="p-6 space-y-6">
+          {/* Paper info */}
+          <div className="space-y-1">
+            <p className="text-sm text-text-gray">Exam Paper</p>
+            <p className="text-lg font-semibold text-white">{paper.courseCode}</p>
+            <p className="text-sm text-text-gray">{paper.courseName}</p>
+            <div className="flex gap-3 text-xs text-text-gray pt-1">
+              <span>{paper.year}</span>
+              <span>•</span>
+              <span>{paper.semester === 'first' ? 'Semester 1' : 'Semester 2'}</span>
+              <span>•</span>
+              <span className="capitalize">{paper.examType}</span>
             </div>
           </div>
 
-          {/* Status Messages */}
-          {error && (
-            <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3">
-              <p className="text-red-400 text-sm">{error}</p>
-            </div>
-          )}
-
-          {isSuccess && (
-            <div className="bg-primary/20 border border-primary/50 rounded-lg p-3 flex items-start gap-2">
-              <Check className="w-4 h-4 text-primary mt-0.5" />
-              <p className="text-primary text-sm">
-                Marking scheme generated successfully! You can find this in your Marking Scheme History.
+          {/* Starting / Waiting */}
+          {(modalState === 'starting' || modalState === 'waiting') && (
+            <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Loader className="w-5 h-5 text-primary animate-spin flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-white">
+                    {modalState === 'starting'
+                      ? 'Starting generation...'
+                      : 'Generating marking scheme...'}
+                  </p>
+                  <p className="text-xs text-text-gray mt-1">
+                    Our AI is analysing the paper. This usually takes 30–90 seconds.
+                  </p>
+                </div>
+              </div>
+              <div className="w-full h-1.5 bg-dark rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full animate-pulse"
+                  style={{ width: '75%' }}
+                />
+              </div>
+              <p className="text-xs text-center text-text-gray">
+                Please keep this window open…
               </p>
             </div>
           )}
 
-          {isLoading && !isSuccess && (
-            <div className="bg-primary/20 border border-primary/50 rounded-lg p-3 flex items-center gap-2">
-              <Loader className="w-4 h-4 text-primary animate-spin" />
-              <p className="text-primary text-sm">Generating marking scheme...</p>
+          {/* Success */}
+          {modalState === 'success' && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-4 h-4 text-green-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-white">Marking Scheme Ready!</p>
+                  <p className="text-xs text-text-gray mt-1">
+                    Saved to <strong className="text-white">My Marking Schemes</strong>. View it
+                    there or continue in the chatbot.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Info Text */}
-          {!isLoading && !isSuccess && (
-            <p className="text-text-gray text-sm">
-              Click the button below to generate a marking scheme for this paper. The generated scheme will be saved to your marking scheme history.
-            </p>
+          {/* Error */}
+          {modalState === 'error' && error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-white">{error}</p>
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-dark-lighter">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="flex-1 px-4 py-3 bg-dark-lighter text-white rounded-lg font-medium hover:bg-dark-lighter/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSuccess ? 'Done' : 'Cancel'}
-          </button>
-          <button
-            onClick={handleGenerate}
-            disabled={isLoading || isSuccess}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary text-dark rounded-lg font-medium hover:bg-primary-dark transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isLoading ? (
-              <>
-                <Loader className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
-            ) : isSuccess ? (
-              <>
-                <Check className="w-4 h-4" />
-                Generated
-              </>
-            ) : (
-              'Generate'
-            )}
-          </button>
+        <div className="border-t border-dark-lighter px-6 py-4">
+          {modalState === 'idle' && (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerate}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors text-sm"
+              >
+                Generate
+              </button>
+            </div>
+          )}
+
+          {modalState === 'starting' && (
+            <div className="flex justify-center py-1">
+              <span className="text-xs text-text-gray">Please wait…</span>
+            </div>
+          )}
+
+          {modalState === 'waiting' && (
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
+            >
+              Run in Background
+            </button>
+          )}
+
+          {modalState === 'success' && (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
+              >
+                Close
+              </button>
+              <Link
+                href={`/chatbot?paper=${paper.id}&code=${encodeURIComponent(paper.courseCode)}&title=${encodeURIComponent(paper.courseName)}`}
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <MessageCircle className="w-4 h-4" />
+                View in Chatbot
+              </Link>
+            </div>
+          )}
+
+          {modalState === 'error' && (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-dark-lighter text-text-gray hover:bg-dark-lighter transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setModalState('idle')
+                  setError(null)
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

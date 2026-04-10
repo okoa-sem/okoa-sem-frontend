@@ -8,6 +8,7 @@ import GoogleSignInButton from './GoogleSignInButton'
 import EmailPasswordForm from './EmailPasswordForm'
 import OtpVerificationForm from './OtpVerificationForm'
 import { login, verifyLogin2FA, resendOtp } from '@/features/auth/services/authService'
+import { signInWithGoogleAuth } from '@/features/auth/services/googleAuthService'
 import { useAuth } from '@/app/providers/authentication-provider/AuthenticationProvider'
 
 type LoginStep = 'CREDENTIALS' | '2FA'
@@ -17,6 +18,7 @@ export default function LoginFormPanel() {
   const searchParams = useSearchParams()
   const [step, setStep] = useState<LoginStep>('CREDENTIALS')
   const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { login: authLogin } = useAuth()
   const [tempEmail, setTempEmail] = useState('')
@@ -75,6 +77,30 @@ export default function LoginFormPanel() {
     }
   }
 
+  // Handle Google Sign-In
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true)
+    setError(null)
+    try {
+      const response = await signInWithGoogleAuth()
+
+      // Store tokens and user data
+      authLogin(response.data.user, response.data.accessToken)
+      localStorage.setItem('refreshToken', response.data.refreshToken)
+
+      // Redirect
+      const nextParam = searchParams.get('next')
+      const targetUrl = nextParam || '/'
+      
+      window.location.href = targetUrl
+    } catch (error: any) {
+      console.error('Google sign-in error:', error)
+      setError(error.response?.data?.message || error.message || 'Google sign-in failed. Please try again.')
+    } finally {
+      setIsGoogleLoading(false)
+    }
+  }
+
   return (
     <div className="w-full flex flex-col">
       <div className="text-center mb-6">
@@ -98,7 +124,7 @@ export default function LoginFormPanel() {
       {step === 'CREDENTIALS' ? (
         <>
           <div className="mb-4">
-            <EmailPasswordForm onSubmit={handleLogin} isLoading={isLoading} />
+            <EmailPasswordForm onSubmit={handleLogin} isLoading={isLoading && !isGoogleLoading} />
           </div>
 
           <div className="relative my-5">
@@ -111,7 +137,11 @@ export default function LoginFormPanel() {
           </div>
 
           <div className="mb-5">
-            <GoogleSignInButton onClick={() => alert('Coming soon')} isLoading={isLoading} />
+            <GoogleSignInButton 
+              onClick={handleGoogleSignIn} 
+              isLoading={isGoogleLoading}
+              disabled={isGoogleLoading || isLoading}
+            />
           </div>
 
           <div className="text-center mb-4 pt-1">

@@ -6,6 +6,7 @@ export interface User {
   avatar?: string
   school?: string
   department?: string
+  phoneNumber?: string
   subscriptionStatus: 'free' | 'daily' | 'monthly'
   subscriptionExpiry?: Date
   createdAt: Date
@@ -136,7 +137,7 @@ export interface ChatHistorySection {
 
 // Subscription Types
 export interface SubscriptionPlan {
-  id: 'daily' | 'monthly'
+  id: 'daily' | 'weekly' | 'monthly'
   name: string
   duration: string
   durationLabel: string
