@@ -84,6 +84,14 @@ export default function SubscriptionModal({
     },
   });
 
+  // Define handleClose early so it can be used in confirmPaymentSuccess
+  const handleClose = () => {
+    setStep('plan-selection')
+    setPhoneNumber('')
+    setPhoneError('')
+    onClose()
+  }
+
   const { mutate: checkAccess } = useMutation({
     mutationFn: () => PaymentService.checkChatAccess(),
     onSuccess: (hasAccess) => {
@@ -299,13 +307,6 @@ export default function SubscriptionModal({
     };
 
     initiateStkPush(stkPushRequest);
-  }
-
-  const handleClose = () => {
-    setStep('plan-selection')
-    setPhoneNumber('')
-    setPhoneError('')
-    onClose()
   }
 
   const cancelPayment = () => {
