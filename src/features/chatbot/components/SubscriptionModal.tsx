@@ -31,6 +31,7 @@ export default function SubscriptionModal({
   const [phoneNumber, setPhoneNumber] = useState('')
   const [phoneError, setPhoneError] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const paymentTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const websocketRef = useRef<PaymentWebSocket | null>(null)
@@ -310,13 +311,20 @@ export default function SubscriptionModal({
   }
 
   const cancelPayment = () => {
-    if (confirm('Are you sure you want to cancel this payment?')) {
-      // Stop polling and WebSocket if still active
-      stopPolling();
-      disconnectWebSocket();
-      paymentReferenceRef.current = null;
-      setStep('phone-input')
-    }
+    setShowCancelConfirmation(true)
+  }
+
+  const confirmCancelPayment = () => {
+    // Stop polling and WebSocket if still active
+    stopPolling();
+    disconnectWebSocket();
+    paymentReferenceRef.current = null;
+    setShowCancelConfirmation(false)
+    setStep('phone-input')
+  }
+
+  const dismissCancelConfirmation = () => {
+    setShowCancelConfirmation(false)
   }
   
   const handleRetryPayment = () => {
@@ -329,7 +337,7 @@ export default function SubscriptionModal({
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/90"
-        onClick={step !== 'processing' && !isProcessing ? handleClose : undefined}
+        onClick={step === 'success' && !isProcessing ? handleClose : undefined}
       />
 
       {/* Modal */}
@@ -338,12 +346,6 @@ export default function SubscriptionModal({
         {step === 'plan-selection' && (
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
-              <button
-                onClick={handleClose}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
               <h2 className="text-xl font-bold text-white">Subscribe</h2>
             </div>
 
@@ -502,12 +504,6 @@ export default function SubscriptionModal({
         {step === 'phone-input' && (
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
-              <button
-                onClick={goToPlanSelection}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
               <h2 className="text-xl font-bold text-white">Subscribe</h2>
             </div>
 
@@ -605,12 +601,6 @@ export default function SubscriptionModal({
         {step === 'error' && (
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
-              <button
-                onClick={handleClose}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
               <h2 className="text-xl font-bold text-white">Payment Error</h2>
             </div>
 
@@ -758,6 +748,50 @@ export default function SubscriptionModal({
           </>
         )}
       </div>
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelConfirmation && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/90"
+            onClick={dismissCancelConfirmation}
+          />
+
+          {/* Confirmation Modal */}
+          <div className="relative bg-dark rounded-2xl max-w-[420px] w-full shadow-2xl" style={{ boxShadow: '0 25px 50px -12px rgba(16, 216, 69, 0.3), 0 0 0 1px rgba(16, 216, 69, 0.1)' }}>
+            <div className="p-6 border-b border-dark-lighter text-center">
+              <h3 className="text-xl font-bold text-white">Cancel Payment?</h3>
+            </div>
+
+            <div className="p-6 text-center">
+              {/* Warning Icon */}
+              <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-orange-600 to-orange-700 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-10 h-10 text-white" />
+              </div>
+
+              <p className="text-text-gray mb-2">Are you sure you want to cancel this payment?</p>
+              <p className="text-sm text-text-gray/70 mb-6">You'll return to the phone number entry screen and can retry when ready.</p>
+
+              {/* Buttons */}
+              <div className="space-y-3">
+                <button
+                  onClick={confirmCancelPayment}
+                  className="w-full bg-red-500 text-white py-3 rounded-xl font-semibold hover:bg-red-600 transition-colors"
+                >
+                  Yes, Cancel Payment
+                </button>
+                <button
+                  onClick={dismissCancelConfirmation}
+                  className="w-full border-2 border-dark-lighter text-white py-3 rounded-xl font-semibold hover:border-primary/50 transition-colors"
+                >
+                  Keep Paying
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
