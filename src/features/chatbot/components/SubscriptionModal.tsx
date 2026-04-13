@@ -17,6 +17,7 @@ interface SubscriptionModalProps {
   onClose: () => void
   onPaymentSuccess: (plan: SubscriptionPlan) => void
   defaultPlan?: 'daily' | 'weekly' | 'monthly'
+  showCloseButton?: boolean
 }
 
 export default function SubscriptionModal({
@@ -24,6 +25,7 @@ export default function SubscriptionModal({
   onClose,
   onPaymentSuccess,
   defaultPlan = 'monthly',
+  showCloseButton = false,
 }: SubscriptionModalProps) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<ModalStep>('plan-selection')
@@ -347,6 +349,15 @@ export default function SubscriptionModal({
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
               <h2 className="text-xl font-bold text-white">Subscribe</h2>
+              {showCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="absolute top-6 right-6 p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             <div className="p-6">
@@ -505,6 +516,15 @@ export default function SubscriptionModal({
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
               <h2 className="text-xl font-bold text-white">Subscribe</h2>
+              {showCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="absolute top-6 right-6 p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             <div className="p-6">

@@ -6,6 +6,7 @@ import { PastPaper, MarkingScheme } from '@/types'
 import { PAST_PAPERS_SCHOOLS } from '@/shared/constants'
 import { useSchoolCodes, useSchoolNames, useAllYears, useYearsBySchool, usePaperCountBySchool, usePaperCountByYear } from '@/features/past-papers/hooks/useSchools'
 import { usePapersByYear, useLatestPapers, useSearchPapers } from '@/features/past-papers/hooks/usePapers'
+import { useActiveSubscription } from '@/features/payments/hooks/payments.hooks'
 import { ExamPaper } from '@/features/past-papers/types/api'
 import { setSelectedSchoolId } from '@/store/slices/ui.slice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -17,6 +18,7 @@ import SearchBar from '@/features/past-papers/components/SearchBar'
 import PaperList from '@/features/past-papers/components/PaperList'
 import PreviewModal from '@/features/past-papers/components/PreviewModal'
 import GenerateMarkingSchemeModal from '@/features/past-papers/components/GenerateMarkingSchemeModal'
+import SubscriptionModal from '@/features/chatbot/components/SubscriptionModal'
 import EmptyState from '@/features/past-papers/components/EmptyState'
 import LoadingState from '@/features/past-papers/components/LoadingState'
 import Pagination from '@/shared/components/Pagination'
@@ -130,6 +132,10 @@ function PastPapersContent() {
   const paginationData = activeData;
   const totalPages = paginationData?.totalPages || 0;
   const [isMarkingSchemeOpen, setIsMarkingSchemeOpen] = useState(false)
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
+
+  // Check subscription status
+  const { isActive: isSubscribed } = useActiveSubscription()
   
   useEffect(() => {
     if (schoolFromUrl) {
@@ -208,9 +214,14 @@ function PastPapersContent() {
   }, [])
 
   const handleGenerateMarkingScheme = useCallback((paper: PastPaper) => {
+    // Check subscription before allowing marking scheme generation
+    if (!isSubscribed) {
+      setShowSubscriptionModal(true)
+      return
+    }
     setMarkingSchemePaper(paper)
     setIsMarkingSchemeOpen(true)
-  }, [])
+  }, [isSubscribed])
 
   const handleCloseMarkingScheme = useCallback(() => {
     setIsMarkingSchemeOpen(false)
@@ -410,6 +421,20 @@ function PastPapersContent() {
         isOpen={isMarkingSchemeOpen}
         onClose={handleCloseMarkingScheme}
         onGenerate={handleGenerateMarkingSchemeSubmit}
+      />
+
+      {/* Subscription Modal */}
+      <SubscriptionModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onPaymentSuccess={() => {
+          setShowSubscriptionModal(false)
+          // Re-trigger marking scheme generation after subscription
+          if (markingSchemePaper) {
+            setIsMarkingSchemeOpen(true)
+          }
+        }}
+        showCloseButton={true}
       />
     </div>
   )
