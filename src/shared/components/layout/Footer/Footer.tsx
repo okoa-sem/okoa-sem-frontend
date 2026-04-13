@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { ROUTES } from '@/shared/constants'
 
 const footerSections = [
@@ -39,12 +40,16 @@ export default function Footer() {
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
           {/* Brand Section */}
           <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-dark font-bold text-lg">
-                OS
-              </div>
-              <span className="text-xl font-bold text-primary">Okoa Sem</span>
-            </div>
+            <Link href={ROUTES.HOME} className="flex items-center gap-2 mb-4 group">
+              <Image 
+                src="/okoa-logo.png"
+                alt="Okoa Sem Logo"
+                width={40}
+                height={40}
+                className="group-hover:scale-105 transition-transform"
+              />
+              <span className="text-lg font-bold text-primary">Okoa Sem</span>
+            </Link>
             <p className="text-text-gray leading-relaxed">
               Your comprehensive platform for accessing past papers and acing your exams.
             </p>
