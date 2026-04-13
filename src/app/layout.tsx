@@ -41,14 +41,11 @@ export const metadata: Metadata = {
     images: ['/okoa-logo.png'],
   },
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+    ],
     apple: '/apple-icon.png',
-    other: {
-      rel: 'icon',
-      url: '/icon-192x192.png',
-      sizes: '192x192',
-      type: 'image/png',
-    },
   },
   robots: {
     index: true,
