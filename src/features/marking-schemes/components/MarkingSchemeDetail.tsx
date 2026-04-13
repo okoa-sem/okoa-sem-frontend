@@ -3,6 +3,8 @@
 import { MarkingScheme } from '@/types'
 import { X, Copy, Share2, Maximize2, Minimize2 } from 'lucide-react'
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface MarkingSchemeDetailProps {
   scheme: MarkingScheme | null
@@ -34,6 +36,92 @@ export default function MarkingSchemeDetail({
     } catch (err) {
       console.error('Failed to copy:', err)
     }
+  }
+
+  // Custom markdown components for better styling (matching chatbot styling)
+  const markdownComponents = {
+    h1: ({ node, ...props }: any) => (
+      <h1 className="text-2xl font-bold mt-6 mb-4 text-white" {...props} />
+    ),
+    h2: ({ node, ...props }: any) => (
+      <h2 className="text-xl font-bold mt-5 mb-3 text-primary" {...props} />
+    ),
+    h3: ({ node, ...props }: any) => (
+      <h3 className="text-lg font-bold mt-4 mb-2 text-white" {...props} />
+    ),
+    p: ({ node, ...props }: any) => (
+      <p className="mb-3 leading-relaxed text-text-gray" {...props} />
+    ),
+    ul: ({ node, ...props }: any) => (
+      <ul className="list-disc list-inside mb-3 space-y-1 text-text-gray" {...props} />
+    ),
+    ol: ({ node, ...props }: any) => (
+      <ol className="list-decimal list-inside mb-3 space-y-1 text-text-gray" {...props} />
+    ),
+    li: ({ node, ...props }: any) => (
+      <li className="ml-2 text-text-gray" {...props} />
+    ),
+    code: ({ node, inline, ...props }: any) => {
+      if (inline) {
+        return (
+          <code
+            className="px-2 py-1 rounded text-sm font-mono bg-dark text-primary"
+            {...props}
+          />
+        )
+      }
+      return <code {...props} />
+    },
+    pre: ({ node, ...props }: any) => (
+      <pre
+        className="rounded-lg p-4 overflow-x-auto mb-3 text-sm bg-dark border border-dark-lighter"
+        {...props}
+      />
+    ),
+    blockquote: ({ node, ...props }: any) => (
+      <blockquote
+        className="border-l-4 pl-4 py-2 mb-3 italic border-primary text-text-gray"
+        {...props}
+      />
+    ),
+    table: ({ node, ...props }: any) => (
+      <div className="overflow-x-auto mb-3">
+        <table
+          className="border-collapse border"
+          style={{
+            borderColor: '#3A3A3A',
+          }}
+          {...props}
+        />
+      </div>
+    ),
+    th: ({ node, ...props }: any) => (
+      <th
+        className="border p-2 font-semibold"
+        style={{
+          borderColor: '#3A3A3A',
+          backgroundColor: '#2A2A2A',
+          color: '#FFFFFF',
+        }}
+        {...props}
+      />
+    ),
+    td: ({ node, ...props }: any) => (
+      <td
+        className="border p-2"
+        style={{
+          borderColor: '#3A3A3A',
+          color: '#B0B0B0',
+        }}
+        {...props}
+      />
+    ),
+    a: ({ node, ...props }: any) => (
+      <a
+        className="text-blue-500 hover:underline"
+        {...props}
+      />
+    ),
   }
 
   return (
@@ -88,52 +176,12 @@ export default function MarkingSchemeDetail({
         <div className="flex-1 overflow-y-auto">
           <div className="p-6">
             <div className="bg-dark rounded-lg p-6 text-white prose prose-invert max-w-none">
-              {/* Parse and display markdown content */}
-              {scheme.content.split('\n').map((line, index) => {
-                if (line.startsWith('# ')) {
-                  return (
-                    <h1 key={index} className="text-2xl font-bold text-white mt-4 mb-2">
-                      {line.replace(/^# /, '')}
-                    </h1>
-                  )
-                }
-                if (line.startsWith('## ')) {
-                  return (
-                    <h2 key={index} className="text-xl font-semibold text-primary mt-3 mb-2">
-                      {line.replace(/^## /, '')}
-                    </h2>
-                  )
-                }
-                if (line.startsWith('**') && line.endsWith('**')) {
-                  return (
-                    <p key={index} className="font-semibold text-white my-2">
-                      {line.replace(/\*\*/g, '')}
-                    </p>
-                  )
-                }
-                if (line.startsWith('- ')) {
-                  return (
-                    <li key={index} className="ml-4 text-text-gray my-1">
-                      {line.replace(/^- /, '')}
-                    </li>
-                  )
-                }
-                if (line.startsWith('1. ')) {
-                  return (
-                    <li key={index} className="ml-4 text-text-gray my-1 list-decimal">
-                      {line.replace(/^1\. /, '')}
-                    </li>
-                  )
-                }
-                if (line.trim() === '') {
-                  return <div key={index} className="h-2" />
-                }
-                return (
-                  <p key={index} className="text-text-gray my-1">
-                    {line}
-                  </p>
-                )
-              })}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={markdownComponents}
+              >
+                {scheme.content}
+              </ReactMarkdown>
             </div>
           </div>
         </div>
