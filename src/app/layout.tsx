@@ -14,14 +14,14 @@ export const metadata: Metadata = {
   title: 'Okoa Sem - Access Past Papers & Study Resources | Meru University',
   description: 'Access 24,000+ past papers from 8 schools at Meru University. Search by topic, get AI study assistance, and prepare for exams with Okoa Sem.',
   keywords: ['past papers', 'study resources', 'exam preparation', 'Meru University papers', 'Kenya', 'AI study bot', 'marking schemes'],
-  metadataBase: new URL('https://okoa-sem.com'),
+  metadataBase: new URL('https://okoasem.app'),
   alternates: {
-    canonical: 'https://okoa-sem.com',
+    canonical: 'https://okoasem.app',
   },
   openGraph: {
     title: 'Okoa Sem - Access Past Papers & Study Resources',
     description: 'Your comprehensive platform for accessing past papers and acing your exams at Meru University.',
-    url: 'https://okoa-sem.com',
+    url: 'https://okoasem.app',
     siteName: 'Okoa Sem',
     images: [
       {
