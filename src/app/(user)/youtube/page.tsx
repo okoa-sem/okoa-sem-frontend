@@ -13,6 +13,7 @@ import LoadingState from '@/features/youtube/components/LoadingState'
 import VideoPlayerModal from '@/features/youtube/components/VideoPlayerModal'
 import SavedVideosSidebar from '@/features/youtube/components/SavedVideosSidebar'
 import CreatePlaylistModal from '@/features/youtube/components/CreatePlaylistModal'
+import Pagination from '@/shared/components/Pagination'
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setQuery } from '@/features/youtube/slices/youtube.slice';
 import { searchVideos } from '@/features/youtube/api/search'
@@ -31,6 +32,9 @@ export default function YouTubePage() {
   const [videos, setVideos] = useState<YouTubeVideo[]>([])
   const [searchState, setSearchState] = useState<SearchState>('idle')
   const resultsRef = useRef<HTMLDivElement>(null)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [nextPageToken, setNextPageToken] = useState<string>('')
+  const [searchHistory, setSearchHistory] = useState<Map<string, { videos: YouTubeVideo[]; token: string }>>(new Map())
 
   
   const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null)
@@ -69,7 +73,7 @@ export default function YouTubePage() {
     localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists))
   }, [playlists])
 
-  const performSearch = async (query: string) => {
+  const performSearch = async (query: string, pageToken?: string) => {
     if (!query.trim()) {
       alert('Please enter a search term')
       return
@@ -82,6 +86,7 @@ export default function YouTubePage() {
         q: query,
         max_results: 20,
         order: 'relevance',
+        ...(pageToken && { page_token: pageToken }),
       })
 
       if (response.success && response.data.videos && response.data.videos.length > 0) {
@@ -96,6 +101,7 @@ export default function YouTubePage() {
           duration: video.duration,
         }))
         setVideos(formattedVideos)
+        setNextPageToken(response.data.next_page_token || '')
         setSearchState('results')
       } else {
         setVideos([])
@@ -110,11 +116,32 @@ export default function YouTubePage() {
 
   useEffect(() => {
     if (searchQuery) {
+      setCurrentPage(0)
+      setNextPageToken('')
       performSearch(searchQuery);
     }
   }, [searchQuery]);
 
-  const handleSearch = () => performSearch(searchQuery)
+  const handlePageChange = (page: number) => {
+    // For now, we support next page navigation using page_token
+    // Page 0 is always the first search, page > 0 uses the next_page_token
+    if (page === 0) {
+      setCurrentPage(0)
+      setNextPageToken('')
+      performSearch(searchQuery)
+    } else if (page > currentPage && nextPageToken) {
+      // Going to next page
+      setCurrentPage(page)
+      performSearch(searchQuery, nextPageToken)
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const handleSearch = () => {
+    setCurrentPage(0)
+    setNextPageToken('')
+    performSearch(searchQuery)
+  }
   const handleTopicClick = (topic: string) => {
     dispatch(setQuery(topic));
   }
@@ -241,15 +268,25 @@ export default function YouTubePage() {
             {searchState === 'loading' && <LoadingState query={searchQuery} />}
             
             {searchState === 'results' && (
-              <VideoResults
-                videos={videos}
-                query={searchQuery}
-                onVideoClick={handleVideoClick}
-                savedVideoIds={savedVideoIds}
-                onSaveVideo={handleSaveVideo}
-                onUnsaveVideo={handleUnsaveVideo}
-                onAddToPlaylist={openPlaylistModalForVideo}
-              />
+              <>
+                <VideoResults
+                  videos={videos}
+                  query={searchQuery}
+                  onVideoClick={handleVideoClick}
+                  savedVideoIds={savedVideoIds}
+                  onSaveVideo={handleSaveVideo}
+                  onUnsaveVideo={handleUnsaveVideo}
+                  onAddToPlaylist={openPlaylistModalForVideo}
+                />
+                {nextPageToken && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={currentPage + 2}
+                    onPageChange={handlePageChange}
+                    isLoading={false}
+                  />
+                )}
+              </>
             )}
             
             {searchState === 'empty' && <EmptyState hasSearched />}
