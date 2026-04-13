@@ -6,16 +6,16 @@ const footerSections = [
   {
     title: 'Features',
     links: [
-      { label: 'Past Papers', href: ROUTES.PAPERS },
-      { label: 'Smart Search', href: '/#features' },
+      { label: 'Past Papers', href: ROUTES.PAST_PAPERS },
+      { label: 'Smart Search', href: ROUTES.PAST_PAPERS },
       { label: 'AI Study Bot', href: ROUTES.CHATBOT },
-      { label: 'Pricing Plans', href: ROUTES.PRICING },
+      { label: 'Pricing Plans', href: '/#pricing' },
     ],
   },
   {
     title: 'Resources',
     links: [
-      { label: 'Browse Schools', href: ROUTES.SCHOOLS },
+      { label: 'Browse Schools', href: '/#schools' },
       { label: 'Marking Schemes', href: ROUTES.MARKING_SCHEMES },
       { label: 'YouTube Channel', href: ROUTES.YOUTUBE },
       { label: 'FAQ', href: '/#faq' },
@@ -24,8 +24,8 @@ const footerSections = [
   {
     title: 'Company',
     links: [
-      { label: 'About Us', href: '#' },
-      { label: 'Contact', href: '#contact' },
+      { label: 'About Us', href: '/about' },
+      { label: 'Contact', href: 'https://wa.me/254792036343' },
       // { label: 'Privacy Policy', href: '#' },
       // { label: 'Terms of Service', href: '#' },
     ],
@@ -62,12 +62,23 @@ export default function Footer() {
               <ul className="space-y-3">
                 {section.links.map((link) => (
                   <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="text-text-gray hover:text-primary transition-colors"
-                    >
-                      {link.label}
-                    </Link>
+                    {link.href.startsWith('http') ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-text-gray hover:text-primary transition-colors"
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        className="text-text-gray hover:text-primary transition-colors"
+                      >
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
