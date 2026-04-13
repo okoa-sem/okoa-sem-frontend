@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Upload, FileText, Award, Maximize2, Minimize2, Loader2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { PastPaper } from '@/types'
 import { Document, Page, pdfjs } from 'react-pdf'
+import { useScreenshotProtection } from '@/features/past-papers/hooks/useScreenshotProtection'
+import { injectProtectionStyles } from '@/features/past-papers/utils/screenshotProtection'
 
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
@@ -52,6 +54,14 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
   const [pdfSource, setPdfSource] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const blobUrlRef = useRef<string | null>(null)
+
+  // Enable screenshot protection
+  useScreenshotProtection(containerRef)
+
+  // Inject protection styles once
+  useEffect(() => {
+    injectProtectionStyles()
+  }, [])
 
   useEffect(() => {
     const checkMobile = () => {
@@ -144,7 +154,7 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
       onClick={(e) => e.target === e.currentTarget && onClose()}
       onContextMenu={preventContextMenu}
     >
-      <div className={`preview-modal relative bg-dark-card flex flex-col overflow-hidden border border-dark-lighter shadow-2xl transition-all duration-300 ${isFullScreen ? 'w-full h-full rounded-none' : 'w-full max-w-6xl h-[90vh] rounded-2xl'}`}>
+      <div ref={containerRef} className={`preview-modal protected-content relative bg-dark-card flex flex-col overflow-hidden border border-dark-lighter shadow-2xl transition-all duration-300 ${isFullScreen ? 'w-full h-full rounded-none' : 'w-full max-w-6xl h-[90vh] rounded-2xl'}`}>
 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-dark-lighter flex-shrink-0">
