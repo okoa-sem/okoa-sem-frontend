@@ -14,6 +14,16 @@ export const metadata: Metadata = {
   title: 'Okoa Sem - Access Past Papers & Study Resources',
   description: 'Access 24,000+ past papers from 8 schools and 50+ departments. Search by topic, upload notes, and collaborate with study groups.',
   keywords: ['past papers', 'study resources', 'exam preparation', 'university papers', 'Kenya'],
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-icon.png',
+    other: {
+      rel: 'icon',
+      url: '/icon-192x192.png',
+      sizes: '192x192',
+      type: 'image/png',
+    },
+  },
 }
 
 export default function RootLayout({
