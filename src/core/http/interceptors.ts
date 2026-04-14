@@ -2,6 +2,7 @@ import { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import { refreshToken } from '@/features/auth/services/authService'
 import { handleTokenRefreshError } from '@/shared/utils/errorHandler'
 import { getFirebaseIdToken } from '@/features/auth/services/firebaseAuthService'
+import { logger } from '@/core/monitoring/logger'
 
 let isRefreshing = false
 let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: any) => void }[] = []
@@ -35,7 +36,7 @@ const authRequestInterceptor = async (config: InternalAxiosRequestConfig) => {
           localStorage.setItem('authToken', token)
         }
       } catch (error) {
-        console.warn('Failed to get Firebase ID token:', error)
+        logger.warn('Failed to obtain authentication token')
       }
     }
 

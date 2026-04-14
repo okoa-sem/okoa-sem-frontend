@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logger } from '@/core/monitoring/logger'
 
 // Allowed domain — only proxy URLs from your own S3 bucket
 const ALLOWED_HOSTS = [
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (err) {
-    console.error('[pdf-proxy] fetch failed:', err)
+    logger.error('PDF proxy fetch failed', { message: (err as Error)?.message })
     return NextResponse.json({ error: 'Failed to fetch PDF' }, { status: 502 })
   }
 }

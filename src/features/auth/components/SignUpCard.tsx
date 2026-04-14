@@ -7,6 +7,7 @@ import FeatureBadges from './FeatureBadges'
 import GoogleSignInButton from './GoogleSignInButton'
 import EmailPasswordForm from './EmailPasswordForm'
 import { login } from '@/features/auth/services/authService'
+import { logger } from '@/core/monitoring/logger'
 
 export default function SignUpCard() {
   const [isLoading, setIsLoading] = useState(false)
@@ -23,13 +24,13 @@ export default function SignUpCard() {
       // The `login` service now triggers a 2FA flow and doesn't return tokens directly.
       // For now, I'll just log the response.
       // A proper implementation would navigate to an OTP/2FA screen.
-      console.log('Login initiated, OTP sent:', response)
+      logger.info('Login initiated with OTP sent')
      
       alert('Login initiated! Please check your email for a 2FA code.\n\nIn a real application, you would be redirected to a verification page.')
       
      
     } catch (error: any) {
-      console.error('Login error:', error)
+      logger.error('Login failed', { message: error.message })
       setError(error.message || 'Login failed. Please try again.')
     } finally {
       setIsLoading(false)
@@ -40,12 +41,11 @@ export default function SignUpCard() {
     setIsLoading(true)
     setError(null)
     try {
-     
-      console.log('Initiating Google Sign-In...')
+      logger.info('Google sign-in initiated')
     
       alert('Google Sign-In would be implemented here.\n\nIn a real application, this would:\n1. Open Google OAuth flow\n2. Authenticate the user\n3. Create/update user profile\n4. Redirect to homepage')
     } catch (error: any) {
-      console.error('Sign-in error:', error)
+      logger.error('Sign-in failed', { message: error?.message })
       setError(error.message || 'Google sign-in failed. Please try again.')
     } finally {
       setIsLoading(false)

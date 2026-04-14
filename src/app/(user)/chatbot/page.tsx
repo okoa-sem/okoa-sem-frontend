@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ChatMessage as ChatMessageType, ChatHistorySection, SubscriptionPlan, UserSubscription } from '@/types'
 import { CHATBOT_CONFIG, STORAGE_KEYS } from '@/shared/constants'
+import { logger } from '@/core/monitoring/logger'
 import CompactHeader from '@/shared/components/CompactHeader'
 import ChatSidebar from '@/features/chatbot/components/ChatSidebar'
 import ChatMessage from '@/features/chatbot/components/ChatMessage'
@@ -258,7 +259,7 @@ export default function ChatbotPage() {
             })
         })
         .catch((err) => {
-          console.warn('[ChatbotPage] Failed to handle paper session:', err)
+          logger.error('Failed to handle paper session', { message: (err as Error)?.message })
           setMessages([makeWelcome()])
         })
         .finally(() => {
@@ -311,7 +312,7 @@ export default function ChatbotPage() {
       if (earlierItems.length) sections.push({ label: 'Earlier', items: earlierItems })
       setChatHistory(sections)
     } catch (e) {
-      console.error('[ChatbotPage] loadSessions failed:', e)
+      logger.error('Failed to load chat sessions', { message: (e as Error)?.message })
     }
   }, [subscription.isActive])
 
@@ -336,7 +337,7 @@ export default function ChatbotPage() {
       pendingMessageRef.current = null
 
       sendViaWebSocket(msg).catch((err) => {
-        console.error('[ChatbotPage] Failed to send pending message:', err)
+        logger.error('Failed to send pending message', { message: (err as Error)?.message })
         setIsTyping(false)
         setMessages((prev) => prev.slice(0, -1))
       })
@@ -379,7 +380,7 @@ export default function ChatbotPage() {
 
   useEffect(() => {
     if (wsError && isTyping) {
-      console.error('[ChatbotPage] WebSocket error:', wsError)
+      logger.error('WebSocket error during typing', { message: typeof wsError === 'string' ? wsError : 'Unknown error' })
       setIsTyping(false)
 
       let userMessage = '⚠️ Failed to get a response. Please try again.'
@@ -445,7 +446,7 @@ export default function ChatbotPage() {
           return [{ label: 'Today', items: [newItem] }, ...prev]
         })
       } catch (err) {
-        console.error('[ChatbotPage] createSession failed:', err)
+        logger.error('Failed to create chat session', { message: (err as Error)?.message })
         setIsTyping(false)
         pendingMessageRef.current = null
         waitingForConnectionRef.current = false
@@ -460,7 +461,7 @@ export default function ChatbotPage() {
       try {
         await sendViaWebSocket(content)
       } catch (err) {
-        console.error('[ChatbotPage] sendMessage failed:', err)
+        logger.error('Failed to send message', { message: (err as Error)?.message })
         setIsTyping(false)
         setMessages((prev) => prev.slice(0, -1))
       }

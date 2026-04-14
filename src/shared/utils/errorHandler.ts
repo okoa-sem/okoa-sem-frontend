@@ -1,4 +1,5 @@
 import { logout } from "@/features/auth/services/authService";
+import { logger } from "@/core/monitoring/logger";
 
 export const getErrorMessage = (error: any): string => {
     if (error && error.response && error.response.data && error.response.data.message) {
@@ -30,7 +31,7 @@ export const handleAuthError = (error: any): string => {
 };
 
 export const handleTokenRefreshError = async (error: any) => {
-    console.error("Token refresh failed:", error);
+    logger.error("Token refresh failed");
     // No need to await, let it run in the background
     logout();
     return Promise.reject(error);

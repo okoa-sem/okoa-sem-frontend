@@ -3,6 +3,7 @@
 import React, { useEffect, ReactNode } from 'react'
 import { initializeAuthStateListener, cleanupAuthStateListener } from '@/features/auth/services/firebaseAuthService'
 import { getFirebaseApp, getFirebaseAnalytics, getFirebasePerformance } from '@/config/firebase'
+import { logger } from '@/core/monitoring/logger'
 
 interface FirebaseProviderProps {
   children: ReactNode
@@ -27,10 +28,14 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({ children }) 
 
       // Initialize auth state listener for efficient auth management
       initializeAuthStateListener().catch(error => {
-        console.error('Failed to initialize auth state listener:', error)
+        logger.error('Failed to initialize auth state listener', { 
+          message: (error as any)?.message 
+        })
       })
     } catch (error) {
-      console.error('Firebase initialization error:', error)
+      logger.error('Firebase initialization error', { 
+        message: (error as any)?.message 
+      })
     }
 
     // Cleanup on unmount

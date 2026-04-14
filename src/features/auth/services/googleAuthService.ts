@@ -2,6 +2,7 @@
 
 import { signInWithGoogle } from '@/features/auth/services/firebaseAuthService'
 import { httpClient } from '@/core/http/client'
+import { logger } from '@/core/monitoring/logger'
 import { User } from '@/features/auth/types'
 
 export interface GoogleAuthRequest {
@@ -40,14 +41,13 @@ export const signInWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
   } catch (error: any) {
     // Handle user cancellation gracefully
     if (error.code === 'auth/popup-closed-by-user') {
-      console.log('User closed the Google sign-in popup')
+      logger.info('User closed the Google sign-in popup')
       throw new Error('Sign-in was cancelled. Please try again.')
     }
 
-    console.error('Google sign-in failed:', {
+    logger.error('Google sign-in failed', {
       status: error.response?.status,
       statusText: error.response?.statusText,
-      data: error.response?.data,
       message: error.message,
       code: error.code,
     })
@@ -78,7 +78,10 @@ export const signUpWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
 
     return response.data
   } catch (error: any) {
-    console.error('Google sign-up failed:', error)
+    logger.error('Google sign-up failed', {
+      status: error.response?.status,
+      message: error.message,
+    })
     throw error
   }
 }
@@ -106,7 +109,10 @@ export const linkGoogleToExistingAccount = async (): Promise<GoogleAuthResponse>
 
     return response.data
   } catch (error: any) {
-    console.error('Failed to link Google account:', error)
+    logger.error('Failed to link Google account', {
+      status: error.response?.status,
+      message: error.message,
+    })
     throw error
   }
 }

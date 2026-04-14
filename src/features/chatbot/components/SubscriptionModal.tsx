@@ -6,6 +6,7 @@ import { SubscriptionPlan } from '@/types'
 import { SUBSCRIPTION_PLANS } from '@/shared/constants'
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import PaymentService from '@/features/payments/services/paymentsService';
+import { logger } from '@/core/monitoring/logger'
 import { StkPushRequest, WebSocketMessage } from '@/features/payments/types';
 import { subscriptionKeys } from '@/query/keys';
 import { PaymentWebSocket } from '@/features/payments/services/web-sockets.integration';
@@ -43,7 +44,7 @@ export default function SubscriptionModal({
   const { mutate: initiateStkPush, isPending: isProcessing } = useMutation({
     mutationFn: (data: StkPushRequest) => PaymentService.initiateStkPush(data),
     onSuccess: (data) => {
-      console.log('STK Push initiated successfully:', data);
+      logger.info('STK Push initiated', { reference: data.reference });
       paymentReferenceRef.current = data.reference;
       setStep('processing');
       setErrorMessage('');
@@ -58,21 +59,24 @@ export default function SubscriptionModal({
       if (token) {
         initializeWebSocket(token, data.reference);
       } else {
-        console.warn('⚠️ No auth token found for WebSocket connection');
+        logger.warn('No auth token found for WebSocket connection');
       }
       
       // Also start polling as backup (in case WebSocket fails)
       startPaymentPolling();
     },
     onError: (error: any) => {
-      console.error('Payment initiation failed:', error);
+      logger.error('Payment initiation failed', { 
+        status: error?.response?.status,
+        message: error?.message
+      });
       const errorMsg = error?.response?.data?.message || error?.message || 'Payment initiation failed';
 
       // 404 means the backend rejected the request because the user already
       // has an active subscription.  Treat it as a successful subscription
       // rather than an error so the modal closes and grants access.
       if (error?.response?.status === 404) {
-        console.log('✅ Backend returned 404 – user already has an active subscription, confirming success.');
+        logger.info('User already has active subscription');
         confirmPaymentSuccess();
         return;
       }
@@ -98,17 +102,20 @@ export default function SubscriptionModal({
   const { mutate: checkAccess } = useMutation({
     mutationFn: () => PaymentService.checkChatAccess(),
     onSuccess: (hasAccess) => {
-      console.log('[checkAccess] Response:', hasAccess);
+      logger.info('Chat access check result', { hasAccess });
       if (hasAccess) {
         // Payment successful!
-        console.log('✅ Payment confirmed! User has chat access.');
+        logger.info('Payment confirmed - user has chat access');
         confirmPaymentSuccess();
       } else {
-        console.log('⏳ Subscription not ready yet, will retry...');
+        logger.info('Subscription not ready yet, will retry');
       }
     },
     onError: (error: any) => {
-      console.error('❌ Failed to check chat access:', error?.response?.status, error?.message);
+      logger.error('Failed to check chat access', { 
+        status: error?.response?.status,
+        message: error?.message
+      });
     },
   });
 
@@ -120,29 +127,31 @@ export default function SubscriptionModal({
         baseUrl,
         token,
         (message: WebSocketMessage) => handleWebSocketMessage(message),
-        () => console.log('✅ WebSocket connected for payment notifications'),
-        () => console.log('❌ WebSocket disconnected'),
-        (error) => console.error('❌ WebSocket error:', error)
+        () => logger.info('WebSocket connected for payment notifications'),
+        () => logger.info('WebSocket disconnected'),
+        (error) => logger.error('WebSocket error occurred')
       );
       
       websocketRef.current.connect();
-    } catch (error) {
-      console.error('Failed to initialize WebSocket:', error);
+    } catch (error: any) {
+      logger.error('Failed to initialize WebSocket', { 
+        message: error?.message 
+      });
     }
   };
 
   const handleWebSocketMessage = (message: WebSocketMessage) => {
-    console.log('[WebSocket Message]', message.type, message);
+    logger.debug('WebSocket message received', { messageType: message.type });
     
     if (message.type === 'PAYMENT_SUCCESS' && message.reference === paymentReferenceRef.current) {
-      console.log('🎉 Payment success confirmed via WebSocket!');
+      logger.info('Payment success confirmed via WebSocket');
       confirmPaymentSuccess();
     } else if (message.type === 'PAYMENT_STATUS_UPDATE' && (message as any).success === true) {
       // Payment was successful - confirm and start checking subscription
-      console.log('🎉 Payment status update received with success flag!');
+      logger.info('Payment status update received with success flag');
       confirmPaymentSuccess();
     } else if (message.type === 'PAYMENT_FAILED' && message.reference === paymentReferenceRef.current) {
-      console.log('❌ Payment failed via WebSocket');
+      logger.warn('Payment failed via WebSocket');
       disconnectWebSocket();
       stopPolling();
       setErrorMessage(message.reason || 'Payment failed. Please try again.');
@@ -213,7 +222,7 @@ export default function SubscriptionModal({
           return;
         }
       } catch (e) {
-        console.warn('History fallback check failed:', e);
+        logger.warn('Subscription history fallback check failed');
       }
     }
 
