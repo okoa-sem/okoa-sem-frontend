@@ -216,6 +216,8 @@ function PastPapersContent() {
   const handleGenerateMarkingScheme = useCallback((paper: PastPaper) => {
     // Check subscription before allowing marking scheme generation
     if (!isSubscribed) {
+      setIsPreviewOpen(false)
+      setPreviewPaper(null)
       setShowSubscriptionModal(true)
       return
     }
