@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { MarkingScheme, PastPaper } from '@/types'
-import { FileText, Trash2, Eye, Download, Search, History } from 'lucide-react'
+import { FileText, Trash2, Eye, Download, Search, History, ChevronLeft, ChevronRight } from 'lucide-react'
 import DeleteConfirmationModal from './DeleteConfirmationModal'
 
 interface MarkingSchemeHistoryProps {
@@ -10,6 +10,8 @@ interface MarkingSchemeHistoryProps {
   onDelete?: (id: string) => void
   onViewDetail: (scheme: MarkingScheme) => void
 }
+
+const ITEMS_PER_PAGE = 20
 
 export default function MarkingSchemeHistory({ 
   schemes, 
@@ -19,6 +21,7 @@ export default function MarkingSchemeHistory({
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [schemeToDelete, setSchemeToDelete] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(0)
 
   const filteredAndSortedSchemes = useMemo(() => {
     let filtered = schemes
@@ -45,6 +48,24 @@ export default function MarkingSchemeHistory({
 
     return sorted
   }, [schemes, searchQuery, sortBy])
+
+  // Pagination
+  const totalPages = Math.ceil(filteredAndSortedSchemes.length / ITEMS_PER_PAGE)
+  const paginatedSchemes = useMemo(() => {
+    const startIndex = currentPage * ITEMS_PER_PAGE
+    return filteredAndSortedSchemes.slice(startIndex, startIndex + ITEMS_PER_PAGE)
+  }, [filteredAndSortedSchemes, currentPage])
+
+  // Reset to first page when search or sort changes
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    setCurrentPage(0)
+  }
+
+  const handleSort = (sort: 'newest' | 'oldest' | 'name') => {
+    setSortBy(sort)
+    setCurrentPage(0)
+  }
 
   if (schemes.length === 0) {
     return (
@@ -80,7 +101,7 @@ export default function MarkingSchemeHistory({
             type="text"
             placeholder="Search by course code or name..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-dark-card border border-dark-lighter rounded-lg text-white placeholder-text-gray focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
           />
         </div>
@@ -90,7 +111,7 @@ export default function MarkingSchemeHistory({
           <span className="text-text-gray text-sm">Sort by:</span>
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
+            onChange={(e) => handleSort(e.target.value as any)}
             className="px-3 py-1.5 bg-dark-card border border-dark-lighter rounded-lg text-white text-sm focus:outline-none focus:border-primary transition-colors"
           >
             <option value="newest">Newest First</option>
@@ -102,7 +123,7 @@ export default function MarkingSchemeHistory({
 
       {/* Results */}
       <div className="text-text-gray text-sm mb-4">
-        Showing <span className="text-primary font-semibold">{filteredAndSortedSchemes.length}</span> marking schemes
+        Showing <span className="text-primary font-semibold">{paginatedSchemes.length}</span> of <span className="text-primary font-semibold">{filteredAndSortedSchemes.length}</span> marking schemes
       </div>
 
       {/* Marking Schemes List */}
@@ -112,7 +133,7 @@ export default function MarkingSchemeHistory({
             <p className="text-text-gray">No marking schemes match your search.</p>
           </div>
         ) : (
-          filteredAndSortedSchemes.map((scheme) => (
+          paginatedSchemes.map((scheme) => (
             <div
               key={scheme.id}
               className="bg-dark-card border border-dark-lighter rounded-xl p-4 hover:border-primary/50 transition-all"
@@ -173,6 +194,33 @@ export default function MarkingSchemeHistory({
           ))
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && filteredAndSortedSchemes.length > 0 && (
+        <div className="flex items-center justify-between pt-6 border-t border-dark-lighter">
+          <div className="text-text-gray text-sm">
+            Page <span className="text-primary font-semibold">{currentPage + 1}</span> of <span className="text-primary font-semibold">{totalPages}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+              disabled={currentPage === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-dark-lighter text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-dark-lighter/80 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Previous</span>
+            </button>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+              disabled={currentPage === totalPages - 1}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-dark-lighter text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-dark-lighter/80 transition-colors"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <DeleteConfirmationModal
         isOpen={!!schemeToDelete}

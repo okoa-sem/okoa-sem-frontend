@@ -175,14 +175,23 @@ export default function MarkingSchemeDetail({
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-6">
-            <div className="bg-dark rounded-lg p-6 text-white prose prose-invert max-w-none">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={markdownComponents}
-              >
-                {scheme.content}
-              </ReactMarkdown>
-            </div>
+            {!scheme.content ? (
+              <div className="flex items-center justify-center h-full min-h-64">
+                <div className="text-center">
+                  <div className="w-12 h-12 rounded-full border-4 border-dark-lighter border-t-primary mx-auto mb-4 animate-spin" />
+                  <p className="text-text-gray">Loading marking scheme...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-dark rounded-lg p-6 text-white prose prose-invert max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={markdownComponents}
+                >
+                  {scheme.content}
+                </ReactMarkdown>
+              </div>
+            )}
           </div>
         </div>
 

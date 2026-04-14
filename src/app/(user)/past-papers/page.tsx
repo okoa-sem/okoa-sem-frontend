@@ -219,6 +219,10 @@ function PastPapersContent() {
       setShowSubscriptionModal(true)
       return
     }
+    // Close the preview modal if it's open so it doesn't remain mounted
+    // during navigation after the user clicks "View Marking Scheme"
+    setIsPreviewOpen(false)
+    setPreviewPaper(null)
     setMarkingSchemePaper(paper)
     setIsMarkingSchemeOpen(true)
   }, [isSubscribed])

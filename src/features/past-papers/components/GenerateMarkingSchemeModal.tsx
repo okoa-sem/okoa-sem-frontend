@@ -4,9 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Loader, Check, AlertCircle, MessageCircle, RefreshCw } from 'lucide-react'
 import { PastPaper, MarkingScheme } from '@/types'
 import Link from 'next/link'
+import { useQueryClient } from '@tanstack/react-query'
 import { httpClient } from '@/core/http/client'
 import { MarkingSchemeContent, MarkingSchemeStatusData } from '@/features/marking-schemes/types'
 import { markingSchemeStorage } from '@/features/marking-schemes/utils/markingSchemeStorage'
+import { markingSchemeKeys } from '@/features/marking-schemes/hooks'
 import { chatService } from '@/features/chatbot/services/chatService'
 
 interface GenerateMarkingSchemeModalProps {
@@ -34,6 +36,8 @@ export default function GenerateMarkingSchemeModal({
   const pollCountRef = useRef(0)
   const activeRef = useRef(false)
 
+  const queryClient = useQueryClient()
+
   // ─── Save to localStorage ─────────────────────────────────────────────────
 
   const saveToLocalStorage = useCallback(
@@ -52,8 +56,12 @@ export default function GenerateMarkingSchemeModal({
         createdAt: now,
         updatedAt: now,
       })
+      // Invalidate the cached list so MarkingSchemesPage always sees the new
+      // scheme on its first render — avoids stale-cache misses when navigating
+      // from a previously-visited marking-schemes page.
+      queryClient.invalidateQueries({ queryKey: markingSchemeKeys.lists() })
     },
-    [paper]
+    [paper, queryClient]
   )
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────
@@ -85,77 +93,74 @@ export default function GenerateMarkingSchemeModal({
     (scheme?: MarkingSchemeContent) => {
       stopPolling()
 
-      if (paper) {
-        
-        if (scheme?.content) {
-          saveToLocalStorage(scheme.content)
-
-          // Also call onGenerate for any parent-level side effects
-          const markingScheme: MarkingScheme = {
-            id: scheme.id,
-            userId: 'current-user',
-            paperId: paper.id,
-            paper,
-            content: scheme.content,
-            createdAt: new Date(scheme.createdAt),
-            updatedAt: new Date(scheme.updatedAt),
-          }
-          onGenerate(paper, markingScheme).catch(() => {})
-        } else {
-          // No content in API response yet - save stub to localStorage so it appears in list
-          // Content will be fetched and updated when user views in chatbot
-          saveToLocalStorage('')
-        }
+      if (!paper) {
+        setModalState('success')
+        return
       }
 
-      setModalState('success')
+      if (scheme?.content) {
+        // Content already available from API
+        saveToLocalStorage(scheme.content)
+
+        // Also call onGenerate for any parent-level side effects
+        const markingScheme: MarkingScheme = {
+          id: scheme.id,
+          userId: 'current-user',
+          paperId: paper.id,
+          paper,
+          content: scheme.content,
+          createdAt: new Date(scheme.createdAt),
+          updatedAt: new Date(scheme.updatedAt),
+        }
+        onGenerate(paper, markingScheme).catch(() => {})
+        setModalState('success')
+      } else {
+        // No content in API response yet - fetch from chat session
+        // This ensures content is available even if user doesn't navigate to chatbot
+        // Add a small delay to allow backend to create the session
+        setTimeout(() => {
+          chatService
+            .getAllSessions()
+            .then((sessions) => {
+              const sessionTitle = `${paper.courseCode} - ${paper.courseName}`
+              const existing = sessions.find(
+                (s) =>
+                  s.title === sessionTitle ||
+                  (paper.courseCode && s.title.includes(paper.courseCode))
+              )
+
+              if (existing) {
+                return chatService.getSessionById(existing.sessionId)
+              }
+              return null
+            })
+            .then((detail) => {
+              if (detail?.messages?.length) {
+                const assistantMsgs = detail.messages.filter(m => m.role === 'ASSISTANT')
+                if (assistantMsgs.length > 0) {
+                  const content = assistantMsgs.map(m => m.content).join('\n\n')
+                  saveToLocalStorage(content)
+                } else {
+                  // If still no assistant messages, save empty stub
+                  saveToLocalStorage('')
+                }
+              } else {
+                // No messages found, save empty stub
+                saveToLocalStorage('')
+              }
+              // Mark as success only after we've fetched and saved the content
+              setModalState('success')
+            })
+            .catch(() => {
+              // If fetch fails, save empty stub so it appears in list
+              saveToLocalStorage('')
+              setModalState('success')
+            })
+        }, 1000)  // Wait 1 second for backend to create session and generate content
+      }
     },
     [paper, onGenerate, stopPolling, saveToLocalStorage]
   )
-
-  // ─── Auto-fetch content from chat when success (even if user doesn't click "View in Chatbot") ──
-
-  useEffect(() => {
-    if (modalState !== 'success' || !paper) return
-
-    const fetchAndSaveContent = async () => {
-      try {
-        const sessions = await chatService.getAllSessions()
-        const sessionTitle = `${paper.courseCode} - ${paper.courseName}`
-        
-        const existing = sessions.find(
-          (s) =>
-            s.title === sessionTitle ||
-            (paper.courseCode && s.title.includes(paper.courseCode))
-        )
-
-        if (existing) {
-          const detail = await chatService.getSessionById(existing.sessionId)
-          if (detail?.messages?.length) {
-            const assistantMsgs = detail.messages.filter(m => m.role === 'ASSISTANT')
-            if (assistantMsgs.length > 0) {
-              const content = assistantMsgs.map(m => m.content).join('\n\n')
-              // Update localStorage with the actual content
-              const schemes = markingSchemeStorage.getAll()
-              const existingIndex = schemes.findIndex(s => s.paperId === paper.id)
-              if (existingIndex >= 0) {
-                schemes[existingIndex].content = content
-                schemes[existingIndex].updatedAt = new Date().toISOString()
-                localStorage.setItem('okoa_sem_marking_schemes', JSON.stringify(schemes))
-              }
-            }
-          }
-        }
-      } catch (err) {
-        // Silently fail - content will be fetched when user views in chatbot
-        console.log('[GenerateMarkingSchemeModal] Background content fetch:', err)
-      }
-    }
-
-    // Delay slightly to allow backend to fully process
-    const timer = setTimeout(fetchAndSaveContent, 2000)
-    return () => clearTimeout(timer)
-  }, [modalState, paper])
 
   // ─── Background polling ───────────────────────────────────────────────────
 
@@ -371,8 +376,19 @@ export default function GenerateMarkingSchemeModal({
                 <div>
                   <p className="font-semibold text-white">Marking Scheme Ready!</p>
                   <p className="text-xs text-text-gray mt-1">
-                    Saved to <strong className="text-white">My Marking Schemes</strong>. View it
-                    there or continue in the chatbot.
+                    Saved to{' '}
+                    {paper ? (
+                      <Link
+                        href={`/marking-schemes?paperId=${paper.id}`}
+                        onClick={onClose}
+                        className="text-primary hover:text-primary/80 transition-colors font-semibold underline"
+                      >
+                        My Marking Schemes
+                      </Link>
+                    ) : (
+                      <strong className="text-white">My Marking Schemes</strong>
+                    )}
+                    . Continue in the chatbot or view it later.
                   </p>
                 </div>
               </div>
@@ -430,14 +446,16 @@ export default function GenerateMarkingSchemeModal({
               >
                 Close
               </button>
-              <Link
-                href={`/chatbot?paper=${paper.id}&code=${encodeURIComponent(paper.courseCode)}&title=${encodeURIComponent(paper.courseName)}`}
-                onClick={onClose}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"
-              >
-                <MessageCircle className="w-4 h-4" />
-                View in Chatbot
-              </Link>
+              {paper && (
+                <Link
+                  href={`/chatbot?paper=${paper.id}&code=${encodeURIComponent(paper.courseCode)}&title=${encodeURIComponent(paper.courseName)}`}
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-dark font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  View in Chatbot
+                </Link>
+              )}
             </div>
           )}
 
