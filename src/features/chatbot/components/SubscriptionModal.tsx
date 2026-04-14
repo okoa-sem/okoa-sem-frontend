@@ -261,11 +261,34 @@ export default function SubscriptionModal({
       if (paymentTimeoutRef.current) {
         clearTimeout(paymentTimeoutRef.current);
       }
+      // Re-enable body scroll when modal closes
+      document.body.style.overflow = 'auto';
+      document.body.style.position = 'static';
     } else {
       // Set selected plan when modal opens with a defaultPlan
       setSelectedPlan(defaultPlan);
+      // Prevent body scroll when modal opens
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
     }
   }, [isOpen, defaultPlan]);
+
+  // Auto-focus phone input when stepping to phone-input
+  useEffect(() => {
+    if (step === 'phone-input' && isOpen) {
+      // Use a small delay to ensure the DOM is updated
+      const timer = setTimeout(() => {
+        const phoneInput = document.getElementById('subscription-phone-input');
+        if (phoneInput) {
+          phoneInput.focus();
+          // Scroll into view on mobile
+          phoneInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [step, isOpen]);
 
   if (!isOpen) return null
 
@@ -348,7 +371,7 @@ export default function SubscriptionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ pointerEvents: 'auto' }}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/90"
@@ -356,7 +379,14 @@ export default function SubscriptionModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-dark rounded-2xl max-w-[500px] w-full max-h-[90vh] overflow-y-auto animate-modalSlideIn shadow-2xl" style={{ boxShadow: '0 25px 50px -12px rgba(16, 216, 69, 0.3), 0 0 0 1px rgba(16, 216, 69, 0.1)' }}>
+      <div 
+        className="relative bg-dark rounded-2xl max-w-[500px] w-full max-h-[90vh] overflow-y-auto animate-modalSlideIn shadow-2xl" 
+        style={{ 
+          boxShadow: '0 25px 50px -12px rgba(16, 216, 69, 0.3), 0 0 0 1px rgba(16, 216, 69, 0.1)',
+          WebkitOverflowScrolling: 'touch',
+          pointerEvents: 'auto'
+        }}
+      >
         {/* Step 1: Plan Selection */}
         {step === 'plan-selection' && (
           <>
@@ -568,12 +598,16 @@ export default function SubscriptionModal({
                     <span className="text-base">KE</span> +254
                   </div>
                   <input
+                    id="subscription-phone-input"
                     type="tel"
+                    inputMode="numeric"
                     value={phoneNumber}
                     onChange={(e) => handlePhoneChange(e.target.value)}
                     placeholder="712345678"
                     maxLength={9}
-                    className={`w-full bg-dark-card border-2 rounded-xl py-3.5 pl-24 pr-4 text-white outline-none transition-colors ${
+                    autoComplete="tel"
+                    autoFocus
+                    className={`w-full bg-dark-card border-2 rounded-xl py-3.5 pl-24 pr-4 text-white outline-none transition-colors touch-manipulation ${
                       phoneError ? 'border-red-500' : 'border-dark-lighter focus:border-primary'
                     }`}
                   />

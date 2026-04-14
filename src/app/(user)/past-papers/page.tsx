@@ -218,6 +218,7 @@ function PastPapersContent() {
     if (!isSubscribed) {
       setIsPreviewOpen(false)
       setPreviewPaper(null)
+      setMarkingSchemePaper(paper)
       setShowSubscriptionModal(true)
       return
     }
