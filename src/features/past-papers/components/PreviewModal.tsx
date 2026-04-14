@@ -54,6 +54,7 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
   const [pdfSource, setPdfSource] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const blobUrlRef = useRef<string | null>(null)
+  const [desktopPageWidth, setDesktopPageWidth] = useState(0)
 
   // Enable screenshot protection
   useScreenshotProtection(containerRef)
@@ -72,12 +73,17 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Width measurement for mobile react-pdf only
+  // Width measurement for react-pdf (both mobile and desktop)
   useEffect(() => {
-    if (!isOpen || !isMobile) return
+    if (!isOpen) return
     const update = () => {
       if (containerRef.current) {
-        setPageWidth(containerRef.current.clientWidth)
+        const width = containerRef.current.clientWidth
+        if (isMobile) {
+          setPageWidth(width)
+        } else {
+          setDesktopPageWidth(width)
+        }
       }
     }
     update()
@@ -91,7 +97,7 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
     }
   }, [isOpen, isFullScreen, isMobile])
 
-  // Fetch PDF blob for mobile only
+  // Fetch PDF blob for both mobile and desktop (react-pdf rendering)
   useEffect(() => {
     if (!isOpen || !paper) return
     setIsLoading(true)
@@ -104,8 +110,6 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
       URL.revokeObjectURL(blobUrlRef.current)
       blobUrlRef.current = null
     }
-
-    if (!isMobile) return
 
     const rawUrl = paper.previewUrl || paper.fileUrl
     if (!rawUrl) {
@@ -121,7 +125,7 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
       setLoadError('Failed to fetch the PDF.')
       setIsLoading(false)
     })
-  }, [isOpen, paper, isMobile])
+  }, [isOpen, paper])
 
   useEffect(() => {
     return () => {
@@ -190,36 +194,96 @@ export default function PreviewModal({ paper, isOpen, onClose, onUploadToAI, onG
 
         {/* ===== DESKTOP ===== */}
         {!isMobile && (
-          <div className="flex-1 bg-dark relative group overflow-y-auto" onContextMenu={preventContextMenu}>
+          <div className="flex-1 bg-white relative group overflow-y-auto" onContextMenu={preventContextMenu}>
             {paper.previewUrl || paper.fileUrl ? (
               <>
-                {isLoading && (
-                  <div className="absolute inset-0 w-full h-full bg-dark z-20 flex items-start justify-center pt-[40vh]">
+                {isLoading && !loadError && (
+                  <div className="absolute inset-0 w-full h-full bg-white z-20 flex items-start justify-center pt-[40vh]">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                      <p className="text-text-gray animate-pulse">Loading preview...</p>
+                      <p className="text-gray-500 animate-pulse">Loading preview...</p>
                     </div>
                   </div>
                 )}
                 
-                <div className="relative w-full h-[350vh]">
-                  <div
-                    className="absolute inset-0 z-10 pointer-events-none"
-                    onContextMenu={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
-                  />
-                  <iframe
-                    src={`${paper.previewUrl || paper.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                    className="w-full h-full border-none print:hidden"
-                    title={`${paper.courseCode} - ${paper.courseName}`}
-                    onLoad={() => setIsLoading(false)}
-                  />
-                </div>
+                {loadError && (
+                  <div className="flex flex-col items-center gap-4 py-20 px-6 text-center">
+                    <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center">
+                      <AlertCircle className="w-8 h-8 text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-gray-800 font-semibold mb-1">Could not load preview</p>
+                      <p className="text-gray-500 text-sm">{loadError}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 w-full max-w-xs">
+                      <button 
+                        onClick={() => {
+                          setLoadError(null)
+                          setIsLoading(true)
+                          setPdfSource(null)
+                          const url = paper.previewUrl || paper.fileUrl
+                          fetchPdfAsBlob(url).then((src) => {
+                            if (src.startsWith('blob:')) blobUrlRef.current = src
+                            setPdfSource(src)
+                          }).catch(() => {
+                            setLoadError('Still unable to load. Please try Ask AI instead.')
+                            setIsLoading(false)
+                          })
+                        }}
+                        className="px-4 py-2.5 bg-primary text-white rounded-lg font-semibold text-sm"
+                      >
+                        Retry
+                      </button>
+                      <button
+                        onClick={() => { onUploadToAI(paper); onClose() }}
+                        className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm"
+                      >
+                        Ask AI instead
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {pdfSource && !loadError && (
+                  <div className="flex flex-col items-center w-full px-4 py-4">
+                    <Document
+                      file={pdfSource}
+                      onLoadSuccess={({ numPages }) => {
+                        setNumPages(numPages)
+                        setIsLoading(false)
+                      }}
+                      onLoadError={(err) => {
+                        console.error('[PreviewModal] Desktop PDF load error:', err)
+                        setIsLoading(false)
+                        setLoadError('This paper could not be rendered on your device.')
+                      }}
+                      loading={null}
+                      error={null}
+                    >
+                      {!isLoading && desktopPageWidth > 0 && numPages && (
+                        <div className="w-full">
+                          {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
+                            <div key={pageNum} className="mb-4 flex justify-center">
+                              <Page
+                                pageNumber={pageNum}
+                                width={desktopPageWidth > 900 ? 800 : desktopPageWidth - 40}
+                                renderAnnotationLayer={false}
+                                renderTextLayer={false}
+                                canvasBackground="#ffffff"
+                                onRenderError={(err) => {
+                                  console.error('[PreviewModal] Desktop render error on page', pageNum, ':', err)
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Document>
+                  </div>
+                )}
               </>
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-text-gray gap-4">
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-4">
                 <FileText className="w-16 h-16 opacity-20" />
                 <p>Preview not available</p>
               </div>
