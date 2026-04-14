@@ -27,7 +27,7 @@ export default function YearSelector({ years, selectedYear, schoolAbbreviation, 
 
   return (
     <div className="mb-6">
-      <div ref={dropdownRef} className="relative inline-block">
+      <div ref={dropdownRef} className="relative inline-block z-30">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-3 px-6 py-4 bg-dark-card border-2 border-dark-lighter rounded-xl text-white hover:border-primary hover:shadow-lg hover:shadow-primary/20 transition-all"
