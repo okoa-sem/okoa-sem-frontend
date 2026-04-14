@@ -9,6 +9,7 @@ import PaymentService from '@/features/payments/services/paymentsService';
 import { logger } from '@/core/monitoring/logger'
 import { StkPushRequest, WebSocketMessage } from '@/features/payments/types';
 import { subscriptionKeys } from '@/query/keys';
+import { paymentQueryKeys } from '@/features/payments/hooks/payments.hooks';
 import { PaymentWebSocket } from '@/features/payments/services/web-sockets.integration';
 
 type ModalStep = 'plan-selection' | 'phone-input' | 'processing' | 'success' | 'error'
@@ -171,11 +172,14 @@ export default function SubscriptionModal({
     
     setStep('success');
     
-    // Invalidate subscription queries to force refetch
+    // Invalidate all subscription-related queries to force refetch
     queryClient.invalidateQueries({ queryKey: subscriptionKeys.history() });
     queryClient.invalidateQueries({ queryKey: subscriptionKeys.access() });
-    
-    // Also force refetch the access query immediately
+    queryClient.invalidateQueries({ queryKey: paymentQueryKeys.subscriptionHistory() });
+    queryClient.invalidateQueries({ queryKey: paymentQueryKeys.chatAccess() });
+
+    // Force immediate refetch so UI reflects new subscription without a page refresh
+    queryClient.refetchQueries({ queryKey: paymentQueryKeys.subscriptionHistory() });
     queryClient.refetchQueries({ queryKey: subscriptionKeys.access() });
     
     // Show success for 2 seconds then close
