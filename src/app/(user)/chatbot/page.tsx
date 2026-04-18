@@ -588,7 +588,7 @@ export default function ChatbotPage() {
               scrollbarWidth: 'thin',
             }}
           >
-            <div className="max-w-6xl mx-auto px-3 md:px-8 lg:px-12 flex flex-col w-full">
+            <div className="max-w-6xl mx-auto px-3 md:px-6 lg:px-8 flex flex-col w-full">
               {messages.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 px-3 md:px-4">
                   <div className="text-center mb-12">
@@ -656,7 +656,7 @@ export default function ChatbotPage() {
                   </div>
                 </div>
               ) : (
-                <div className="py-8 px-3 sm:px-4 md:px-6 lg:px-8 flex flex-col space-y-2">
+                <div className="py-6 px-2 sm:px-3 md:px-4 lg:px-6 flex flex-col space-y-4">
                   {messages.map((message) => (
                     <ChatMessage key={message.id} message={message} />
                   ))}

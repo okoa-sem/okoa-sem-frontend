@@ -63,36 +63,34 @@ export default function ChatInput({ onSend, disabled = false, placeholder = 'Ask
   const isDisabled = disabled || !message.trim()
 
   const getContainerStyle = (): React.CSSProperties => ({
-    backgroundColor: isLight ? '#F9FAFB' : '#0F0F12',
+    backgroundColor: isLight ? '#FFFFFF' : '#0F0F12',
     borderTop: isLight ? '1px solid #E5E7EB' : '1px solid #2A2A2A',
   })
 
   const getTextareaStyle = (): React.CSSProperties => ({
-    backgroundColor: isLight ? '#FFFFFF' : '#1A1A1A',
-    borderWidth: '2px',
+    backgroundColor: 'transparent',
+    borderWidth: '1px',
     borderStyle: 'solid',
-    borderColor: isFocused ? '#00D666' : (isLight ? '#E5E7EB' : '#2A2A2A'),
-    color: isLight ? '#1F2937' : '#FFFFFF',
-    caretColor: '#00D666',
-    boxShadow: isFocused ? `0 0 0 3px ${isLight ? 'rgba(0, 214, 102, 0.15)' : 'rgba(0, 214, 102, 0.1)'}` : 'none',
+    borderColor: isFocused ? '#00C853' : (isLight ? '#D1D5DB' : '#565869'),
+    color: isLight ? '#0D0D0D' : '#ECECEC',
+    caretColor: '#00C853',
+    boxShadow: isFocused ? `0 0 0 2px ${isLight ? 'rgba(0, 200, 83, 0.1)' : 'rgba(0, 200, 83, 0.1)'}` : 'none',
   })
 
   const getButtonStyle = (): React.CSSProperties => ({
     backgroundColor: isDisabled 
       ? (isLight ? '#E5E7EB' : '#2A2A2A')
-      : '#00D666',
-    color: isDisabled
-      ? (isLight ? '#9CA3AF' : '#6B7280')
-      : isLight ? '#000000' : '#FFFFFF',
+      : '#00C853',
+    color: '#FFFFFF',
     fontWeight: 600,
   })
 
   return (
     <div 
-      className="px-3 sm:px-4 py-4 md:px-6 md:py-6 lg:p-8 sticky bottom-0 z-50 w-full"
+      className="px-3 sm:px-4 py-3 md:px-6 md:py-4 lg:py-5 sticky bottom-0 z-50 w-full"
       style={getContainerStyle()}
     >
-      <div className="max-w-[900px] mx-auto flex gap-3 md:gap-4 items-end lg:px-0">
+      <div className="max-w-4xl mx-auto flex gap-3 md:gap-4 items-end lg:px-0">
         <textarea
           ref={textareaRef}
           value={message}

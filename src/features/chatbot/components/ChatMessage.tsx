@@ -61,32 +61,32 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
   // Theme-aware styles
   const getBotAvatarStyle = (): React.CSSProperties => ({
-    backgroundColor: '#00D666',
-    color: isLight ? '#FFFFFF' : '#1A1A1A',
+    backgroundColor: isLight ? '#F0F0F0' : '#3A3A3A',
+    color: isLight ? '#000000' : '#FFFFFF',
   })
 
   const getUserAvatarStyle = (): React.CSSProperties => ({
-    background: isLight 
-      ? 'linear-gradient(135deg, #6B7280, #4B5563)' 
-      : 'linear-gradient(135deg, #6B7280, #4B5563)',
-    color: '#FFFFFF',
+    background: isLight ? '#E5E7EB' : '#565869',
+    color: isLight ? '#000000' : '#FFFFFF',
   })
 
   const getBotMessageStyle = (): React.CSSProperties => ({
-    backgroundColor: isLight ? '#F9FAFB' : '#2A2A2A',
-    borderRadius: '4px 18px 18px 18px',
-    border: isLight ? '1px solid #E5E7EB' : 'none',
+    backgroundColor: 'transparent',
+    borderRadius: '0px',
+    border: 'none',
+    padding: '0px',
   })
 
   const getUserMessageStyle = (): React.CSSProperties => ({
-    backgroundColor: isLight ? '#00D666' : '#3A4A3A',
-    borderRadius: '18px 18px 4px 18px',
+    backgroundColor: isLight ? '#F3F4F6' : '#1A1A1F',
+    borderRadius: '12px',
+    padding: '12px 16px',
   })
 
   const getMessageTextStyle = (): React.CSSProperties => ({
     color: isBot 
-      ? (isLight ? '#1F2937' : '#FFFFFF')
-      : '#FFFFFF',
+      ? (isLight ? '#0D0D0D' : '#ECECEC')
+      : (isLight ? '#0D0D0D' : '#ECECEC'),
   })
 
   const getTimestampStyle = (): React.CSSProperties => ({
@@ -124,8 +124,8 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           <code
             className="px-2 py-1 rounded text-sm font-mono"
             style={{
-              backgroundColor: isLight ? '#F3F4F6' : '#1A1A1A',
-              color: isLight ? '#DC2626' : '#FF7B7B',
+              backgroundColor: isLight ? '#EFEFEF' : '#2A2A2A',
+              color: isLight ? '#D91E63' : '#FF7B7B',
             }}
             {...props}
           />
@@ -137,8 +137,8 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       <pre
         className="rounded-lg p-4 overflow-x-auto mb-3 text-sm"
         style={{
-          backgroundColor: isLight ? '#F3F4F6' : '#1A1A1A',
-          border: `1px solid ${isLight ? '#E5E7EB' : '#3A3A3A'}`,
+          backgroundColor: isLight ? '#F5F5F5' : '#262626',
+          border: `1px solid ${isLight ? '#EFEFEF' : '#3A3A3A'}`,
         }}
         {...props}
       />
@@ -195,7 +195,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div
-      className={`flex gap-3 md:gap-4 mb-8 animate-slideIn ${
+      className={`flex gap-3 md:gap-4 mb-8 animate-slideIn w-full ${
         isBot ? 'justify-start' : 'justify-end'
       }`}
       onMouseEnter={() => setHoverActions(true)}
@@ -212,10 +212,10 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       )}
 
       {/* Message Content Container */}
-      <div className="flex flex-col gap-2 max-w-[900px] min-w-0">
+      <div className={`flex flex-col gap-2 ${isBot ? 'max-w-[900px]' : 'max-w-[70%] lg:max-w-[60%]'} min-w-0`}>
         {/* Main Message */}
         <div
-          className="p-5 rounded-2xl"
+          className="rounded-md"
           style={isBot ? getBotMessageStyle() : getUserMessageStyle()}
         >
           <div 
@@ -252,9 +252,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             <>
               <button
                 onClick={copyToClipboard}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all hover:scale-105"
+                className="flex items-center gap-1 px-2 py-1.5 rounded transition-all hover:bg-opacity-80"
                 style={{
-                  backgroundColor: isLight ? '#F3F4F6' : '#3A3A3A',
+                  backgroundColor: 'transparent',
                   color: isLight ? '#6B7280' : '#A0A0A0',
                 }}
                 title="Copy message"
@@ -269,9 +269,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
               <button
                 onClick={() => setShowShareDialog(true)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all hover:scale-105"
+                className="flex items-center gap-1 px-2 py-1.5 rounded transition-all hover:bg-opacity-80"
                 style={{
-                  backgroundColor: isLight ? '#F3F4F6' : '#3A3A3A',
+                  backgroundColor: 'transparent',
                   color: isLight ? '#6B7280' : '#A0A0A0',
                 }}
                 title="Share response"
@@ -282,9 +282,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
               <button
                 onClick={handleExport}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all hover:scale-105"
+                className="flex items-center gap-1 px-2 py-1.5 rounded transition-all hover:bg-opacity-80"
                 style={{
-                  backgroundColor: isLight ? '#F3F4F6' : '#3A3A3A',
+                  backgroundColor: 'transparent',
                   color: isLight ? '#6B7280' : '#A0A0A0',
                 }}
                 title="Download response"
