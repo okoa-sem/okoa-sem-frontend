@@ -19,12 +19,10 @@ export const generateMarkingScheme = async (
   request: GenerateMarkingSchemeRequest
 ): Promise<MarkingSchemeGenerationData> => {
   try {
-    console.log('API: Generating marking scheme with request:', request)
     const response = await httpClient.post<GenerateMarkingSchemeApiResponse>(
       `${MARKING_SCHEMES_BASE}/generate`,
       request
     )
-    console.log('API: Generation response:', response.data)
     return response.data.data
   } catch (error: any) {
     console.error('API: Generation error:', error)
@@ -59,11 +57,9 @@ export const checkMarkingSchemeStatus = async (
  */
 export const getMarkingSchemes = async (): Promise<MarkingSchemeContent[]> => {
   try {
-    console.log('API: Fetching all marking schemes')
     const response = await httpClient.get<GetMarkingSchemesApiResponse>(
       MARKING_SCHEMES_BASE
     )
-    console.log('API: Marking schemes response:', response.data)
     return response.data.data.markingSchemes
   } catch (error: any) {
     console.error('API: Error fetching marking schemes:', error)

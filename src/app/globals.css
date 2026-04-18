@@ -209,7 +209,7 @@
 
   body {
     background-color: var(--color-dark);
-    font-family: 'Facebook Business', Arial, sans-serif;
+    font-family: var(--font-body);
     color: var(--color-text-primary);
   
     line-height: 1.6;

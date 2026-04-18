@@ -13,6 +13,7 @@ import {
   Unsubscribe,
 } from 'firebase/auth'
 import { getFirebaseAuth } from '@/config/firebase'
+import { logger } from '@/core/monitoring/logger'
 
 // Cache for auth state to reduce Firebase API calls
 let authStateCache: FirebaseUser | null = null
@@ -62,7 +63,7 @@ export const signInWithEmail = async (email: string, password: string) => {
     authStateCache = result.user
     return result
   } catch (error) {
-    console.error('Email sign-in failed:', error)
+    logger.error('Email sign-in failed', { message: (error as any)?.message })
     throw error
   }
 }
@@ -77,7 +78,7 @@ export const createUserAccount = async (email: string, password: string) => {
     authStateCache = result.user
     return result
   } catch (error) {
-    console.error('Account creation failed:', error)
+    logger.error('Account creation failed', { message: (error as any)?.message })
     throw error
   }
 }
@@ -107,7 +108,7 @@ export const signInWithGoogle = async () => {
       idToken: token,
     }
   } catch (error) {
-    console.error('Google sign-in failed:', error)
+    logger.error('Google sign-in failed', { message: (error as any)?.message })
     throw error
   }
 }
@@ -121,7 +122,7 @@ export const signOutUser = async () => {
     await signOut(auth)
     authStateCache = null
   } catch (error) {
-    console.error('Sign out failed:', error)
+    logger.error('Sign out failed', { message: (error as any)?.message })
     throw error
   }
 }
@@ -140,7 +141,7 @@ export const getFirebaseIdToken = async (): Promise<string | null> => {
     const token = await user.getIdToken(false) 
     return token
   } catch (error) {
-    console.error('Failed to get ID token:', error)
+    logger.error('Failed to get ID token', { errorType: (error as any)?.code })
     return null
   }
 }
@@ -159,7 +160,7 @@ export const getFirebaseIdTokenForced = async (): Promise<string | null> => {
     const token = await user.getIdToken(true) // true = force refresh
     return token
   } catch (error) {
-    console.error('Failed to get ID token (forced):', error)
+    logger.error('Failed to get ID token (forced refresh)', { errorType: (error as any)?.code })
     return null
   }
 }

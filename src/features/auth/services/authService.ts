@@ -1,4 +1,5 @@
 import { httpClient } from '@/core/http/client'
+import { logger } from '@/core/monitoring/logger'
 import { 
   ApiResponse, 
   SignupRequest, 
@@ -122,6 +123,6 @@ export const logout = async (): Promise<void> => {
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('user')
   } catch (error) {
-    console.error('Logout error', error)
+    logger.error('Logout failed', { message: (error as any)?.message })
   }
 }

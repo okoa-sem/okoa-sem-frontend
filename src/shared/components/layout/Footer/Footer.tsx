@@ -1,20 +1,21 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { ROUTES } from '@/shared/constants'
 
 const footerSections = [
   {
     title: 'Features',
     links: [
-      { label: 'Past Papers', href: ROUTES.PAPERS },
-      { label: 'Smart Search', href: '/#features' },
+      { label: 'Past Papers', href: ROUTES.PAST_PAPERS },
+      { label: 'Smart Search', href: ROUTES.PAST_PAPERS },
       { label: 'AI Study Bot', href: ROUTES.CHATBOT },
-      { label: 'Pricing Plans', href: ROUTES.PRICING },
+      { label: 'Pricing Plans', href: '/#pricing' },
     ],
   },
   {
     title: 'Resources',
     links: [
-      { label: 'Browse Schools', href: ROUTES.SCHOOLS },
+      { label: 'Browse Schools', href: '/#schools' },
       { label: 'Marking Schemes', href: ROUTES.MARKING_SCHEMES },
       { label: 'YouTube Channel', href: ROUTES.YOUTUBE },
       { label: 'FAQ', href: '/#faq' },
@@ -23,8 +24,8 @@ const footerSections = [
   {
     title: 'Company',
     links: [
-      { label: 'About Us', href: '#' },
-      { label: 'Contact', href: '#contact' },
+      { label: 'About Us', href: '/about' },
+      { label: 'Contact', href: 'https://wa.me/254792036343' },
       // { label: 'Privacy Policy', href: '#' },
       // { label: 'Terms of Service', href: '#' },
     ],
@@ -39,12 +40,16 @@ export default function Footer() {
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
           {/* Brand Section */}
           <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-dark font-bold text-lg">
-                OS
-              </div>
-              <span className="text-xl font-bold text-primary">Okoa Sem</span>
-            </div>
+            <Link href={ROUTES.HOME} className="flex items-center gap-2 mb-4 group">
+              <Image 
+                src="/okoa-logo.png"
+                alt="Okoa Sem Logo"
+                width={40}
+                height={40}
+                className="group-hover:scale-105 transition-transform"
+              />
+              <span className="text-lg font-bold text-primary">Okoa Sem</span>
+            </Link>
             <p className="text-text-gray leading-relaxed">
               Your comprehensive platform for accessing past papers and acing your exams.
             </p>
@@ -57,12 +62,23 @@ export default function Footer() {
               <ul className="space-y-3">
                 {section.links.map((link) => (
                   <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="text-text-gray hover:text-primary transition-colors"
-                    >
-                      {link.label}
-                    </Link>
+                    {link.href.startsWith('http') ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-text-gray hover:text-primary transition-colors"
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        className="text-text-gray hover:text-primary transition-colors"
+                      >
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

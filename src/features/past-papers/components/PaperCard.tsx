@@ -77,14 +77,14 @@ export default function PaperCard({ paper, onPreview, onUploadToAI, onGenerateMa
             <span className="hidden sm:inline">Generate Answers</span>
           </button>
           
-          <button
+          {/* <button
             onClick={() => onUploadToAI(paper)}
             className="flex items-center gap-2 px-4 py-2.5 bg-secondary/20 text-secondary rounded-lg font-medium text-sm hover:bg-secondary/30 transition-colors"
             title="Upload to AI Chatbot"
           >
             <Upload className="w-4 h-4" />
             <span className="hidden md:inline">Ask AI</span>
-          </button>
+          </button> */}
         </div>
       </div>
     </div>

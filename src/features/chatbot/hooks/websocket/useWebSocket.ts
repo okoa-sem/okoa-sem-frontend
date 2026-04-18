@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import { useAppSelector } from '@/store/hooks';
+import { logger } from '@/core/monitoring/logger';
 import {
 	initializeSession,
 	setConnectionState,
@@ -76,7 +77,7 @@ export const useWebSocket = (
 		const wsService = WebSocketService.getForSession(sid);
 
 		wsService.on('onConnect', () => {
-			console.log('[useWebSocket] ✅ Connected:', sid);
+			logger.info('WebSocket connected', { sessionId: sid });
 			dispatch(setConnectionState({ sessionId: sid, state: 'AUTHENTICATED' }));
 			dispatch(setSubscriptionStatus({ sessionId: sid, isValid: true }));
 			dispatch(clearError(sid));
@@ -108,7 +109,7 @@ export const useWebSocket = (
 		});
 
 		wsService.on('onError', (payload: ErrorPayload) => {
-			console.error('[useWebSocket] Error:', payload.message);
+			logger.error('WebSocket error occurred', { message: payload.message });
 			dispatch(setError({ sessionId: sid, message: payload.message }));
 			onErrorRef.current?.(payload.message);
 		});
@@ -154,7 +155,7 @@ export const useWebSocket = (
 			await WebSocketService.getForSession(sid).connect(sid, accessToken);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : 'Connection failed';
-			console.error('[useWebSocket] connect() failed:', errorMsg);
+			logger.error('WebSocket connection failed', { error: errorMsg });
 			connectedSessionRef.current = null;
 			listenersRegisteredRef.current = null;
 			dispatch(setConnectionState({ sessionId: sid, state: 'ERROR' }));

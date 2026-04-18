@@ -14,7 +14,7 @@ const testimonials = [
     name: 'Sarah Akinyi',
     initials: 'SA',
     school: 'Business Admin, SBE',
-    text: 'The monthly plan is worth every shilling! I\'ve accessed papers from 3 years back, and the notes-to-questions feature is a game changer. I upload my lecture notes and get instant practice questions. My grades have improved significantly!',
+    text: 'The monthly plan is worth every shilling! I\'ve accessed papers from 3 years back, and the smart search feature helped me find exactly what I need. The AI Study Bot explains complex business concepts and generates practice questions. My grades have improved significantly!',
     date: '1 month ago',
   },
   {
@@ -28,7 +28,7 @@ const testimonials = [
     name: 'Mary Wanjiru',
     initials: 'MW',
     school: 'Nursing, SON',
-    text: 'The AI chatbot is incredible! I asked questions about pharmacology at 2 AM and got detailed explanations instantly. The offline download feature means I can study anywhere, even without internet. Best KSh 100 I\'ve ever spent!',
+    text: 'The AI chatbot is incredible! I asked questions about pharmacology at 2 AM and got detailed explanations instantly. The platform is accessible from any device, so I can study anytime, anywhere. Best KSh 250 I\'ve ever spent!',
     date: '5 days ago',
   },
   {

@@ -1,4 +1,5 @@
 import { httpClient } from "@/core/http/client";
+import { logger } from "@/core/monitoring/logger";
 import { ApiResponse, StkPushResponse, StkPushRequest, WebSocketStatusResponse, SubscriptionHistoryItem } from "../types";
 // Types based on the documentation you provided
 const PAYMENT_BASE = '/payments';
@@ -68,15 +69,15 @@ const PaymentService = {
             `${SUBSCRIPTION_BASE}/check-access`
         );
 
-        console.log('[PaymentService.checkChatAccess] Response:', response.data);
+        logger.info('Checking chat access');
 
         if (!response.data.success) {
-            console.warn('[PaymentService.checkChatAccess] Success flag is false:', response.data.message);
+            logger.warn('Chat access check failed', { message: response.data.message });
             throw new Error(response.data.message || 'Failed to check chat access');
         }
 
         const hasAccess = response.data.data || false;
-        console.log('[PaymentService.checkChatAccess] User has access:', hasAccess);
+        logger.info('Chat access determination', { hasAccess });
         return hasAccess;
     }
 };

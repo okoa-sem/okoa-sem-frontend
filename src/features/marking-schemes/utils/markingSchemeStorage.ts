@@ -1,5 +1,7 @@
 // src/features/marking-schemes/utils/markingSchemeStorage.ts
 
+import { logger } from '@/core/monitoring/logger'
+
 const STORAGE_KEY = 'okoa_sem_marking_schemes'
 
 export interface LocalMarkingScheme {
@@ -39,7 +41,7 @@ export const markingSchemeStorage = {
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(schemes))
     } catch (e) {
-      console.error('[markingSchemeStorage] save failed:', e)
+      logger.error('Failed to save marking scheme')
     }
   },
 
@@ -66,7 +68,7 @@ export const markingSchemeStorage = {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(schemes))
       }
     } catch (e) {
-      console.error('[markingSchemeStorage] updateContent failed:', e)
+      logger.error('Failed to update marking scheme content')
     }
   },
 
@@ -76,7 +78,7 @@ export const markingSchemeStorage = {
       const schemes = markingSchemeStorage.getAll().filter(s => s.id !== id)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(schemes))
     } catch (e) {
-      console.error('[markingSchemeStorage] delete failed:', e)
+      logger.error('Failed to delete marking scheme')
     }
   },
 

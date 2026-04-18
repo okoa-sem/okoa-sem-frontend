@@ -2,6 +2,7 @@ import { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import { refreshToken } from '@/features/auth/services/authService'
 import { handleTokenRefreshError } from '@/shared/utils/errorHandler'
 import { getFirebaseIdToken } from '@/features/auth/services/firebaseAuthService'
+import { logger } from '@/core/monitoring/logger'
 
 let isRefreshing = false
 let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: any) => void }[] = []
@@ -33,24 +34,15 @@ const authRequestInterceptor = async (config: InternalAxiosRequestConfig) => {
         // If Firebase token obtained, cache it in localStorage for subsequent requests
         if (token) {
           localStorage.setItem('authToken', token)
-          console.log('[HTTP] Obtained Firebase ID token and cached in localStorage')
         }
       } catch (error) {
-        console.warn('Failed to get Firebase ID token:', error)
+        logger.warn('Failed to obtain authentication token')
       }
     }
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-  }
-
-  // Debug logging for subscription endpoints
-  if (config.url?.includes('/subscriptions/') || config.url?.includes('/payments/')) {
-    console.log(`[HTTP] ${config.method?.toUpperCase()} ${config.url}`, {
-      hasToken: !!config.headers.Authorization,
-      headers: config.headers,
-    })
   }
 
   return config
@@ -62,26 +54,12 @@ const onRequestError = (error: AxiosError): Promise<AxiosError> => {
 
 // --- RESPONSE INTERCEPTOR ---
 const onResponseSuccess = (response: any) => {
-  // Debug logging for subscription endpoints
-  if (response.config?.url?.includes('/subscriptions/') || response.config?.url?.includes('/payments/')) {
-    console.log(`[HTTP] ✅ ${response.config.method?.toUpperCase()} ${response.config.url} - Status: ${response.status}`, {
-      responseData: response.data
-    })
-  }
   return response
 }
 
 const setupResponseInterceptor = (axiosInstance: AxiosInstance) => {
   const onResponseError = async (error: AxiosError): Promise<any> => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
-
-    // Debug logging for subscription endpoints
-    if (error.config?.url?.includes('/subscriptions/') || error.config?.url?.includes('/payments/')) {
-      console.log(`[HTTP] ❌ ${error.config.method?.toUpperCase()} ${error.config.url} - Status: ${error.response?.status}`, {
-        errorMessage: error.response?.data,
-        error: error.message
-      })
-    }
 
     // Handle only 401 errors and ensure it's not a retry request
     if (error.response?.status !== 401 || originalRequest._retry) {

@@ -1,0 +1,10 @@
+# Allow all search engines to crawl the site
+User-agent: *
+Allow: /
+
+# Disallow private user areas
+Disallow: /api/
+Disallow: /admin/
+
+# Sitemap location
+Sitemap: https://okoasem.app/sitemap.xml

@@ -6,8 +6,10 @@ import { SubscriptionPlan } from '@/types'
 import { SUBSCRIPTION_PLANS } from '@/shared/constants'
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import PaymentService from '@/features/payments/services/paymentsService';
+import { logger } from '@/core/monitoring/logger'
 import { StkPushRequest, WebSocketMessage } from '@/features/payments/types';
 import { subscriptionKeys } from '@/query/keys';
+import { paymentQueryKeys } from '@/features/payments/hooks/payments.hooks';
 import { PaymentWebSocket } from '@/features/payments/services/web-sockets.integration';
 
 type ModalStep = 'plan-selection' | 'phone-input' | 'processing' | 'success' | 'error'
@@ -17,6 +19,7 @@ interface SubscriptionModalProps {
   onClose: () => void
   onPaymentSuccess: (plan: SubscriptionPlan) => void
   defaultPlan?: 'daily' | 'weekly' | 'monthly'
+  showCloseButton?: boolean
 }
 
 export default function SubscriptionModal({
@@ -24,6 +27,7 @@ export default function SubscriptionModal({
   onClose,
   onPaymentSuccess,
   defaultPlan = 'monthly',
+  showCloseButton = false,
 }: SubscriptionModalProps) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<ModalStep>('plan-selection')
@@ -31,6 +35,7 @@ export default function SubscriptionModal({
   const [phoneNumber, setPhoneNumber] = useState('')
   const [phoneError, setPhoneError] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const paymentTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const websocketRef = useRef<PaymentWebSocket | null>(null)
@@ -40,7 +45,7 @@ export default function SubscriptionModal({
   const { mutate: initiateStkPush, isPending: isProcessing } = useMutation({
     mutationFn: (data: StkPushRequest) => PaymentService.initiateStkPush(data),
     onSuccess: (data) => {
-      console.log('STK Push initiated successfully:', data);
+      logger.info('STK Push initiated', { reference: data.reference });
       paymentReferenceRef.current = data.reference;
       setStep('processing');
       setErrorMessage('');
@@ -55,21 +60,24 @@ export default function SubscriptionModal({
       if (token) {
         initializeWebSocket(token, data.reference);
       } else {
-        console.warn('⚠️ No auth token found for WebSocket connection');
+        logger.warn('No auth token found for WebSocket connection');
       }
       
       // Also start polling as backup (in case WebSocket fails)
       startPaymentPolling();
     },
     onError: (error: any) => {
-      console.error('Payment initiation failed:', error);
+      logger.error('Payment initiation failed', { 
+        status: error?.response?.status,
+        message: error?.message
+      });
       const errorMsg = error?.response?.data?.message || error?.message || 'Payment initiation failed';
 
       // 404 means the backend rejected the request because the user already
       // has an active subscription.  Treat it as a successful subscription
       // rather than an error so the modal closes and grants access.
       if (error?.response?.status === 404) {
-        console.log('✅ Backend returned 404 – user already has an active subscription, confirming success.');
+        logger.info('User already has active subscription');
         confirmPaymentSuccess();
         return;
       }
@@ -84,20 +92,31 @@ export default function SubscriptionModal({
     },
   });
 
+  // Define handleClose early so it can be used in confirmPaymentSuccess
+  const handleClose = () => {
+    setStep('plan-selection')
+    setPhoneNumber('')
+    setPhoneError('')
+    onClose()
+  }
+
   const { mutate: checkAccess } = useMutation({
     mutationFn: () => PaymentService.checkChatAccess(),
     onSuccess: (hasAccess) => {
-      console.log('[checkAccess] Response:', hasAccess);
+      logger.info('Chat access check result', { hasAccess });
       if (hasAccess) {
         // Payment successful!
-        console.log('✅ Payment confirmed! User has chat access.');
+        logger.info('Payment confirmed - user has chat access');
         confirmPaymentSuccess();
       } else {
-        console.log('⏳ Subscription not ready yet, will retry...');
+        logger.info('Subscription not ready yet, will retry');
       }
     },
     onError: (error: any) => {
-      console.error('❌ Failed to check chat access:', error?.response?.status, error?.message);
+      logger.error('Failed to check chat access', { 
+        status: error?.response?.status,
+        message: error?.message
+      });
     },
   });
 
@@ -109,29 +128,31 @@ export default function SubscriptionModal({
         baseUrl,
         token,
         (message: WebSocketMessage) => handleWebSocketMessage(message),
-        () => console.log('✅ WebSocket connected for payment notifications'),
-        () => console.log('❌ WebSocket disconnected'),
-        (error) => console.error('❌ WebSocket error:', error)
+        () => logger.info('WebSocket connected for payment notifications'),
+        () => logger.info('WebSocket disconnected'),
+        (error) => logger.error('WebSocket error occurred')
       );
       
       websocketRef.current.connect();
-    } catch (error) {
-      console.error('Failed to initialize WebSocket:', error);
+    } catch (error: any) {
+      logger.error('Failed to initialize WebSocket', { 
+        message: error?.message 
+      });
     }
   };
 
   const handleWebSocketMessage = (message: WebSocketMessage) => {
-    console.log('[WebSocket Message]', message.type, message);
+    logger.debug('WebSocket message received', { messageType: message.type });
     
     if (message.type === 'PAYMENT_SUCCESS' && message.reference === paymentReferenceRef.current) {
-      console.log('🎉 Payment success confirmed via WebSocket!');
+      logger.info('Payment success confirmed via WebSocket');
       confirmPaymentSuccess();
     } else if (message.type === 'PAYMENT_STATUS_UPDATE' && (message as any).success === true) {
       // Payment was successful - confirm and start checking subscription
-      console.log('🎉 Payment status update received with success flag!');
+      logger.info('Payment status update received with success flag');
       confirmPaymentSuccess();
     } else if (message.type === 'PAYMENT_FAILED' && message.reference === paymentReferenceRef.current) {
-      console.log('❌ Payment failed via WebSocket');
+      logger.warn('Payment failed via WebSocket');
       disconnectWebSocket();
       stopPolling();
       setErrorMessage(message.reason || 'Payment failed. Please try again.');
@@ -151,11 +172,14 @@ export default function SubscriptionModal({
     
     setStep('success');
     
-    // Invalidate subscription queries to force refetch
+    // Invalidate all subscription-related queries to force refetch
     queryClient.invalidateQueries({ queryKey: subscriptionKeys.history() });
     queryClient.invalidateQueries({ queryKey: subscriptionKeys.access() });
-    
-    // Also force refetch the access query immediately
+    queryClient.invalidateQueries({ queryKey: paymentQueryKeys.subscriptionHistory() });
+    queryClient.invalidateQueries({ queryKey: paymentQueryKeys.chatAccess() });
+
+    // Force immediate refetch so UI reflects new subscription without a page refresh
+    queryClient.refetchQueries({ queryKey: paymentQueryKeys.subscriptionHistory() });
     queryClient.refetchQueries({ queryKey: subscriptionKeys.access() });
     
     // Show success for 2 seconds then close
@@ -202,7 +226,7 @@ export default function SubscriptionModal({
           return;
         }
       } catch (e) {
-        console.warn('History fallback check failed:', e);
+        logger.warn('Subscription history fallback check failed');
       }
     }
 
@@ -237,11 +261,34 @@ export default function SubscriptionModal({
       if (paymentTimeoutRef.current) {
         clearTimeout(paymentTimeoutRef.current);
       }
+      // Re-enable body scroll when modal closes
+      document.body.style.overflow = 'auto';
+      document.body.style.position = 'static';
     } else {
       // Set selected plan when modal opens with a defaultPlan
       setSelectedPlan(defaultPlan);
+      // Prevent body scroll when modal opens
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
     }
   }, [isOpen, defaultPlan]);
+
+  // Auto-focus phone input when stepping to phone-input
+  useEffect(() => {
+    if (step === 'phone-input' && isOpen) {
+      // Use a small delay to ensure the DOM is updated
+      const timer = setTimeout(() => {
+        const phoneInput = document.getElementById('subscription-phone-input');
+        if (phoneInput) {
+          phoneInput.focus();
+          // Scroll into view on mobile
+          phoneInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [step, isOpen]);
 
   if (!isOpen) return null
 
@@ -301,21 +348,21 @@ export default function SubscriptionModal({
     initiateStkPush(stkPushRequest);
   }
 
-  const handleClose = () => {
-    setStep('plan-selection')
-    setPhoneNumber('')
-    setPhoneError('')
-    onClose()
+  const cancelPayment = () => {
+    setShowCancelConfirmation(true)
   }
 
-  const cancelPayment = () => {
-    if (confirm('Are you sure you want to cancel this payment?')) {
-      // Stop polling and WebSocket if still active
-      stopPolling();
-      disconnectWebSocket();
-      paymentReferenceRef.current = null;
-      setStep('phone-input')
-    }
+  const confirmCancelPayment = () => {
+    // Stop polling and WebSocket if still active
+    stopPolling();
+    disconnectWebSocket();
+    paymentReferenceRef.current = null;
+    setShowCancelConfirmation(false)
+    setStep('phone-input')
+  }
+
+  const dismissCancelConfirmation = () => {
+    setShowCancelConfirmation(false)
   }
   
   const handleRetryPayment = () => {
@@ -324,26 +371,36 @@ export default function SubscriptionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ pointerEvents: 'auto' }}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/90"
-        onClick={step !== 'processing' && !isProcessing ? handleClose : undefined}
+        onClick={step === 'success' && !isProcessing ? handleClose : undefined}
       />
 
       {/* Modal */}
-      <div className="relative bg-dark rounded-2xl max-w-[500px] w-full max-h-[90vh] overflow-y-auto animate-modalSlideIn shadow-2xl" style={{ boxShadow: '0 25px 50px -12px rgba(16, 216, 69, 0.3), 0 0 0 1px rgba(16, 216, 69, 0.1)' }}>
+      <div 
+        className="relative bg-dark rounded-2xl max-w-[500px] w-full max-h-[90vh] overflow-y-auto animate-modalSlideIn shadow-2xl" 
+        style={{ 
+          boxShadow: '0 25px 50px -12px rgba(16, 216, 69, 0.3), 0 0 0 1px rgba(16, 216, 69, 0.1)',
+          WebkitOverflowScrolling: 'touch',
+          pointerEvents: 'auto'
+        }}
+      >
         {/* Step 1: Plan Selection */}
         {step === 'plan-selection' && (
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
-              <button
-                onClick={handleClose}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
               <h2 className="text-xl font-bold text-white">Subscribe</h2>
+              {showCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="absolute top-6 right-6 p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             <div className="p-6">
@@ -501,13 +558,16 @@ export default function SubscriptionModal({
         {step === 'phone-input' && (
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
-              <button
-                onClick={goToPlanSelection}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
               <h2 className="text-xl font-bold text-white">Subscribe</h2>
+              {showCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="absolute top-6 right-6 p-2 text-text-gray hover:text-white hover:bg-dark-lighter rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             <div className="p-6">
@@ -538,12 +598,16 @@ export default function SubscriptionModal({
                     <span className="text-base">KE</span> +254
                   </div>
                   <input
+                    id="subscription-phone-input"
                     type="tel"
+                    inputMode="numeric"
                     value={phoneNumber}
                     onChange={(e) => handlePhoneChange(e.target.value)}
                     placeholder="712345678"
                     maxLength={9}
-                    className={`w-full bg-dark-card border-2 rounded-xl py-3.5 pl-24 pr-4 text-white outline-none transition-colors ${
+                    autoComplete="tel"
+                    autoFocus
+                    className={`w-full bg-dark-card border-2 rounded-xl py-3.5 pl-24 pr-4 text-white outline-none transition-colors touch-manipulation ${
                       phoneError ? 'border-red-500' : 'border-dark-lighter focus:border-primary'
                     }`}
                   />
@@ -604,12 +668,6 @@ export default function SubscriptionModal({
         {step === 'error' && (
           <>
             <div className="p-6 border-b border-dark-lighter relative text-center">
-              <button
-                onClick={handleClose}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
               <h2 className="text-xl font-bold text-white">Payment Error</h2>
             </div>
 
@@ -757,6 +815,50 @@ export default function SubscriptionModal({
           </>
         )}
       </div>
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelConfirmation && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/90"
+            onClick={dismissCancelConfirmation}
+          />
+
+          {/* Confirmation Modal */}
+          <div className="relative bg-dark rounded-2xl max-w-[420px] w-full shadow-2xl" style={{ boxShadow: '0 25px 50px -12px rgba(16, 216, 69, 0.3), 0 0 0 1px rgba(16, 216, 69, 0.1)' }}>
+            <div className="p-6 border-b border-dark-lighter text-center">
+              <h3 className="text-xl font-bold text-white">Cancel Payment?</h3>
+            </div>
+
+            <div className="p-6 text-center">
+              {/* Warning Icon */}
+              <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-orange-600 to-orange-700 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-10 h-10 text-white" />
+              </div>
+
+              <p className="text-text-gray mb-2">Are you sure you want to cancel this payment?</p>
+              <p className="text-sm text-text-gray/70 mb-6">You'll return to the phone number entry screen and can retry when ready.</p>
+
+              {/* Buttons */}
+              <div className="space-y-3">
+                <button
+                  onClick={confirmCancelPayment}
+                  className="w-full bg-red-500 text-white py-3 rounded-xl font-semibold hover:bg-red-600 transition-colors"
+                >
+                  Yes, Cancel Payment
+                </button>
+                <button
+                  onClick={dismissCancelConfirmation}
+                  className="w-full border-2 border-dark-lighter text-white py-3 rounded-xl font-semibold hover:border-primary/50 transition-colors"
+                >
+                  Keep Paying
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

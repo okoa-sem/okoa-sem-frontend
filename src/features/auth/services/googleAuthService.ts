@@ -2,6 +2,7 @@
 
 import { signInWithGoogle } from '@/features/auth/services/firebaseAuthService'
 import { httpClient } from '@/core/http/client'
+import { logger } from '@/core/monitoring/logger'
 import { User } from '@/features/auth/types'
 
 export interface GoogleAuthRequest {
@@ -25,44 +26,28 @@ export const signInWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
     // Step 1: Authenticate with Firebase
     const { user, idToken } = await signInWithGoogle()
 
-    console.log('Firebase Google sign-in successful:', {
-      email: user.email,
-      uid: user.uid,
-      hasIdToken: !!idToken,
-      idTokenLength: idToken?.length,
-    })
-
     if (!idToken) {
       throw new Error('Failed to get Google ID token from Firebase')
     }
 
     // Step 2: Send to backend for verification and account creation/linking
-    console.log('Sending to backend:', {
-      url: '/auth/google',
-      hasIdToken: !!idToken,
-      email: user.email,
-    })
-
     const response = await httpClient.post<GoogleAuthResponse>(
       '/auth/google',
       {
         idToken,
       } as GoogleAuthRequest
     )
-
-    console.log('Backend response successful:', response.status)
     return response.data
   } catch (error: any) {
     // Handle user cancellation gracefully
     if (error.code === 'auth/popup-closed-by-user') {
-      console.log('User closed the Google sign-in popup')
+      logger.info('User closed the Google sign-in popup')
       throw new Error('Sign-in was cancelled. Please try again.')
     }
 
-    console.error('Google sign-in failed:', {
+    logger.error('Google sign-in failed', {
       status: error.response?.status,
       statusText: error.response?.statusText,
-      data: error.response?.data,
       message: error.message,
       code: error.code,
     })
@@ -93,7 +78,10 @@ export const signUpWithGoogleAuth = async (): Promise<GoogleAuthResponse> => {
 
     return response.data
   } catch (error: any) {
-    console.error('Google sign-up failed:', error)
+    logger.error('Google sign-up failed', {
+      status: error.response?.status,
+      message: error.message,
+    })
     throw error
   }
 }
@@ -121,7 +109,10 @@ export const linkGoogleToExistingAccount = async (): Promise<GoogleAuthResponse>
 
     return response.data
   } catch (error: any) {
-    console.error('Failed to link Google account:', error)
+    logger.error('Failed to link Google account', {
+      status: error.response?.status,
+      message: error.message,
+    })
     throw error
   }
 }

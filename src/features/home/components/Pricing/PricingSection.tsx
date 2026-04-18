@@ -135,25 +135,17 @@ export default function PricingSection() {
                   </li>
                 ))}
               </ul>
-
-              {/* CTA Button */}
-              <button
-                className={`w-full py-4 rounded-xl font-semibold transition-all ${
-                  plan.popular
-                    ? 'bg-primary text-dark hover:bg-primary-dark'
-                    : 'bg-transparent border-2 border-primary text-primary hover:bg-primary hover:text-dark'
-                }`}
-              >
-                Select {plan.name}
-              </button>
             </div>
           ))}
         </div>
 
         {/* Payment Info */}
-        <div className="text-center">
+        <div className="text-center space-y-2">
+          <p className="text-text-gray text-sm">
+            Choose a plan to see what you'll get when accessing the AI Study Bot
+          </p>
           <p className="text-text-gray">
-            Secure payment via <span className="text-primary font-semibold">PayHero</span>
+            Payment happens when you access the <span className="text-primary font-semibold">AI Chatbot</span>
           </p>
         </div>
       </div>

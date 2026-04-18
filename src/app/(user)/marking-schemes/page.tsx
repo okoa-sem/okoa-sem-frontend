@@ -1,17 +1,23 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import CompactHeader from '@/shared/components/CompactHeader'
 import MarkingSchemeHistory from '@/features/marking-schemes/components/MarkingSchemeHistory'
 import MarkingSchemeDetail from '@/features/marking-schemes/components/MarkingSchemeDetail'
-import { useMarkingSchemes, useDeleteMarkingScheme } from '@/features/marking-schemes/hooks'
+import { useMarkingSchemes, useDeleteMarkingScheme, markingSchemeKeys } from '@/features/marking-schemes/hooks'
 import { MarkingScheme } from '@/types'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
 export default function MarkingSchemesPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const queryClient = useQueryClient()
   const [selectedScheme, setSelectedScheme] = useState<MarkingScheme | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const autoOpenedForPaperIdRef = useRef<string | null>(null)
 
   // Read from localStorage via updated hook
   const { data: localSchemes = [], isLoading } = useMarkingSchemes()
@@ -58,9 +64,55 @@ export default function MarkingSchemesPage() {
   )
 
   const handleCloseDetail = useCallback(() => {
+    // Keep autoOpenedForPaperIdRef as-is so the effect doesn't re-open the modal
+    // while the URL replacement is still in-flight. The ref resets naturally
+    // inside the effect once searchParams no longer has a paperId.
     setIsDetailOpen(false)
+    router.replace('/marking-schemes', { scroll: false })
     setTimeout(() => setSelectedScheme(null), 300)
-  }, [])
+  }, [router])
+
+  // First effect: invalidate cache when paperId is present to ensure fresh data
+  useEffect(() => {
+    const paperId = searchParams.get('paperId')
+    if (paperId) {
+      queryClient.invalidateQueries({ queryKey: markingSchemeKeys.lists() })
+    }
+  }, [searchParams, queryClient])
+
+  // Second effect: auto-select scheme from URL parameter once data loads
+  // Uses a ref to ensure the modal only auto-opens once per paperId
+  useEffect(() => {
+    const paperId = searchParams.get('paperId')
+
+    if (!paperId) {
+      autoOpenedForPaperIdRef.current = null
+      return
+    }
+
+    if (paperId === autoOpenedForPaperIdRef.current) return
+
+    // Wait for data to load
+    if (isLoading) return
+
+    if (markingSchemes.length === 0) {
+      // Data loaded but scheme not found yet - might need to wait a bit more
+      return
+    }
+
+    // Try both direct string match and numeric match
+    const scheme = markingSchemes.find((s) => {
+      const schemePaperId = String(s.paperId)
+      const urlPaperId = String(paperId)
+      return schemePaperId === urlPaperId || parseInt(schemePaperId, 10) === parseInt(urlPaperId, 10)
+    })
+    
+    if (scheme) {
+      autoOpenedForPaperIdRef.current = paperId
+      setSelectedScheme(scheme)
+      setIsDetailOpen(true)
+    }
+  }, [searchParams, markingSchemes, isLoading])
 
   return (
     <div className="min-h-screen bg-dark flex flex-col">

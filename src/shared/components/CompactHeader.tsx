@@ -22,9 +22,9 @@ export default function CompactHeader({
   isSidebarOpen = false
 }: CompactHeaderProps) {
   return (
-    <nav className="bg-dark border-b border-dark-lighter px-2 sm:px-4 md:px-[5%] py-0 flex-shrink-0 h-16 md:h-18">
+    <nav className="bg-dark border-b border-dark-lighter px-2 sm:px-4 md:px-[5%] py-0 flex-shrink-0 h-14 md:h-16">
       <div className="max-w-[1400px] mx-auto flex justify-between items-center gap-2 sm:gap-3 h-full">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
@@ -36,16 +36,16 @@ export default function CompactHeader({
           )}
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-0 text-primary font-bold text-lg sm:text-xl md:text-2xl mt-4 truncate">
+          <Link href="/" className="flex items-center text-primary font-bold text-base sm:text-lg md:text-xl truncate">
             <Image 
               src="/okoa-logo.png"
               alt="Okoa Sem Logo"
-              width={70}
-              height={70}
-              className="hover:scale-105 transition-transform flex-shrink-0 w-12 h-12 sm:w-auto sm:h-auto"
+              width={40}
+              height={30}
+              className="hover:scale-105 transition-transform flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 mt-1"
               style={{ mixBlendMode: 'screen' }}
             />
-            <span className="-ml-2 sm:-ml-3 md:-ml-6">Okoa Sem</span>
+            <span className="flex-shrink-0 -ml-2">Okoa Sem</span>
           </Link>
         </div>
 
